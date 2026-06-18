@@ -73,28 +73,22 @@ service cloud.firestore {
 
 3. Klik **Publish**.
 
-### 4. Aktifkan Storage (untuk gambar)
+### 4. Setup Cloudinary (untuk menyimpan gambar — gratis, tanpa kartu kredit)
 
-1. Menu **Storage** → **Get started** → pilih mode **production**.
-2. Masuk tab **Rules**, tempel ini:
+Catatan penting: sejak Februari 2026, Firebase Storage **mewajibkan** paket berbayar Blaze (kartu kredit terdaftar) meskipun pemakaiannya sendiri tetap gratis di bawah kuota. Untuk menghindari ini sepenuhnya, situs ini memakai **Cloudinary** — layanan khusus gambar dengan kuota gratis 25GB yang tidak meminta kartu kredit sama sekali.
 
-```
-rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /notes-images/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null
-        && request.resource.size < 8 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
-    }
-  }
-}
-```
+1. Daftar gratis di [cloudinary.com/users/register/free](https://cloudinary.com/users/register/free).
+2. Di halaman **Dashboard**, salin nilai **Cloud name** (terlihat di bagian atas, contoh: `dxyz1234a`).
+3. Klik ikon gerigi ⚙️ (**Settings**) di kiri bawah → tab **Upload** → cari bagian **Upload presets** → klik **Add upload preset**.
+4. Pada preset baru: ubah **Signing Mode** dari "Signed" menjadi **"Unsigned"** → klik **Save**.
+5. Salin nama preset yang baru dibuat (biasanya muncul otomatis seperti `xxxxxxxx`, atau beri nama sendiri misalnya `fom-notes`).
+6. Tempel **Cloud name** dan **nama preset** tadi ke `js/firebase-config.js`, pada bagian `window.CLOUDINARY_CONFIG`.
 
-3. Klik **Publish**.
+Selesai — gambar akan otomatis terunggah ke Cloudinary saat kamu memakai tombol gambar di editor, dan tetap gratis selama total penyimpanan di bawah 25GB (jurnal pribadi biasanya memakai jauh di bawah itu, ribuan foto baru akan mendekati batas ini).
 
-> Kenapa aturan menulis (create/update/delete) memeriksa status admin lewat Firestore, bukan lewat kode JavaScript saja? Karena kode JavaScript bisa dilihat dan dimodifikasi siapa saja di browser. Aturan keamanan sungguhan harus ditegakkan di sisi server — itulah fungsi Firestore Rules di atas.
+> Catatan keamanan: "unsigned upload preset" memang didesain untuk dipakai langsung dari kode browser (bukan rahasia seperti API key). Untuk mencegah penyalahgunaan oleh orang luar, preset ini dibatasi hanya menerima file gambar dan maksimal 8MB (sudah diatur di kode `js/editor.js`). Jika suatu saat preset disalahgunakan, kamu bisa menghapus/membuat ulang preset dengan nama baru dari Cloudinary Dashboard.
+
+> Kenapa aturan menulis Firestore (create/update/delete) memeriksa status admin lewat Firestore Rules, bukan lewat kode JavaScript saja? Karena kode JavaScript bisa dilihat dan dimodifikasi siapa saja di browser. Aturan keamanan sungguhan harus ditegakkan di sisi server — itulah fungsi Firestore Rules di atas.
 
 ## Cara hosting di GitHub Pages
 
@@ -154,4 +148,8 @@ js/
 
 ## Biaya
 
-Firebase paket gratis (Spark): 50.000 pembacaan + 20.000 penulisan dokumen Firestore per hari, dan 5GB penyimpanan gambar gratis. Untuk jurnal pribadi dengan beberapa ribu pembaca, ini jauh lebih dari cukup dan kemungkinan besar tidak akan pernah kena biaya.
+- **Firebase (Spark, gratis selamanya, tanpa kartu kredit)**: 1 GiB total data tersimpan di Firestore, 50.000 pembacaan/hari, 20.000 penulisan/hari, 10 GiB transfer/bulan. Untuk teks jurnal pribadi (tanpa gambar, karena gambar disimpan di Cloudinary), ini sangat jauh dari cukup — realistisnya tidak akan pernah kena biaya.
+- **Cloudinary (gratis, tanpa kartu kredit)**: 25GB penyimpanan gambar + 25GB bandwidth/bulan. Cukup untuk ribuan foto resolusi normal.
+- **GitHub Pages**: gratis untuk repository publik.
+
+Praktis, seluruh situs ini bisa berjalan permanen tanpa biaya sepeser pun dan tanpa perlu mendaftarkan kartu kredit di mana pun.

@@ -1,6 +1,8 @@
 // =========================================================
-// FIREBASE CORE — init app, auth, firestore, storage
+// FIREBASE CORE — init app, auth, firestore
 // Modul ini jadi sumber tunggal koneksi Firebase untuk seluruh app.
+// Penyimpanan gambar memakai Cloudinary (lihat editor.js), bukan
+// Firebase Storage, karena Storage kini mewajibkan paket berbayar Blaze.
 // =========================================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -16,12 +18,10 @@ import {
   doc,
   getDoc,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 export let app = null;
 export let auth = null;
 export let db = null;
-export let storage = null;
 export let ready = false;
 
 export function initFirebaseCore() {
@@ -34,7 +34,6 @@ export function initFirebaseCore() {
     app = initializeApp(cfg);
     auth = getAuth(app);
     db = getFirestore(app);
-    storage = getStorage(app);
     ready = true;
     return true;
   } catch (err) {

@@ -4,13 +4,6 @@
 // Bullet list, Insert image (kiri/kanan/tengah/full), Insert divider.
 // =========================================================
 
-import { storage } from "./firebase-core.js";
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
-
 let editorEl = null;
 let onChangeCallback = null;
 
@@ -125,14 +118,29 @@ function buildImageFigure(url, position) {
 }
 
 async function handleImageUpload(file) {
-  if (!storage) {
-    alert("Penyimpanan gambar belum aktif — konfigurasi Firebase terlebih dahulu.");
+  const cfg = window.CLOUDINARY_CONFIG;
+  if (!cfg || cfg.cloudName === "GANTI_CLOUD_NAME") {
+    alert("Penyimpanan gambar belum aktif — konfigurasi Cloudinary di js/firebase-config.js terlebih dahulu (lihat README.md).");
     return null;
   }
-  const path = `notes-images/${Date.now()}-${file.name}`;
-  const fileRef = ref(storage, path);
-  await uploadBytes(fileRef, file);
-  return getDownloadURL(fileRef);
+  if (file.size > 8 * 1024 * 1024) {
+    alert("Ukuran gambar maksimal 8 MB.");
+    return null;
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", cfg.uploadPreset);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cfg.cloudName}/image/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || "Upload ke Cloudinary gagal");
+  }
+  return data.secure_url;
 }
 
 async function insertImage(position) {
