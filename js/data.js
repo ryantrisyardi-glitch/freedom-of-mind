@@ -1,10 +1,15 @@
 // =========================================================
 // DATA LAYER — semua operasi baca/tulis ke Firestore
 // Koleksi:
-//   chapters: { id, judul, deskripsi, urutan, createdAt }
-//   notes:    { id, chapterId, judul, contentJson, contentHtml, tag[], urutan, createdAt, updatedAt }
+//   chapters: { id, judul, deskripsi, urutan, createdAt, deletedAt }
+//   notes:    { id, chapterId, judul, contentHtml, tag[], urutan, createdAt, updatedAt, deletedAt }
 //   comments: { id, noteId, uid, name, photoURL, text, createdAt }
 //   admins:   { id = email, addedBy, addedAt }
+//
+// Soft delete: deletedAt == null  -> aktif (tampil normal)
+//              deletedAt = waktu  -> di Trash (masih ada, bisa di-restore)
+// Penghapusan permanen hanya terjadi lewat fungsi *Forever(), dipanggil
+// manual oleh admin dari halaman Trash.
 // =========================================================
 
 import { db } from "./firebase-core.js";
@@ -24,11 +29,24 @@ import {
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+export const QUICK_NOTES_NAME = "Quick Notes";
+
 // ---------- Chapters ----------
 
+/** Hanya chapter aktif (belum dihapus), diurutkan. Filter deletedAt di klien
+ *  supaya tidak butuh composite index tambahan di Firestore. */
 export async function getAllChapters() {
   const snap = await getDocs(query(collection(db, "chapters"), orderBy("urutan", "asc")));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((c) => !c.deletedAt);
+}
+
+export async function getTrashedChapters() {
+  const snap = await getDocs(collection(db, "chapters"));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((c) => !!c.deletedAt);
 }
 
 export async function getChapter(chapterId) {
@@ -44,6 +62,7 @@ export async function createChapter({ judul, deskripsi }) {
     deskripsi: deskripsi || "",
     urutan: maxUrutan + 1,
     createdAt: serverTimestamp(),
+    deletedAt: null,
   });
 }
 
@@ -51,7 +70,48 @@ export async function updateChapter(chapterId, data) {
   return updateDoc(doc(db, "chapters", chapterId), data);
 }
 
-export async function deleteChapter(chapterId) {
+/**
+ * Mencari (atau membuat jika belum ada) chapter "Quick Notes" —
+ * tujuan default saat catatan dipindahkan keluar dari chapter yang dihapus.
+ */
+export async function getOrCreateQuickNotesChapter() {
+  const all = await getAllChapters();
+  const existing = all.find((c) => c.judul === QUICK_NOTES_NAME);
+  if (existing) return existing;
+  const ref = await createChapter({
+    judul: QUICK_NOTES_NAME,
+    deskripsi: "Catatan tanpa bagian khusus.",
+  });
+  return { id: ref.id, judul: QUICK_NOTES_NAME, deskripsi: "Catatan tanpa bagian khusus." };
+}
+
+/**
+ * Soft-delete sebuah chapter.
+ * mode "moveNotes": catatan di dalamnya dipindah ke Quick Notes, lalu chapter masuk Trash.
+ * mode "trashNotes": catatan di dalamnya ikut di-soft-delete (masuk Trash juga).
+ */
+export async function deleteChapter(chapterId, mode = "moveNotes") {
+  const notes = await getNotesByChapter(chapterId);
+
+  if (mode === "moveNotes" && notes.length > 0) {
+    const quickNotes = await getOrCreateQuickNotesChapter();
+    await Promise.all(
+      notes.map((n) => updateDoc(doc(db, "notes", n.id), { chapterId: quickNotes.id, updatedAt: serverTimestamp() }))
+    );
+  } else if (mode === "trashNotes" && notes.length > 0) {
+    await Promise.all(
+      notes.map((n) => updateDoc(doc(db, "notes", n.id), { deletedAt: serverTimestamp() }))
+    );
+  }
+
+  return updateDoc(doc(db, "chapters", chapterId), { deletedAt: serverTimestamp() });
+}
+
+export async function restoreChapter(chapterId) {
+  return updateDoc(doc(db, "chapters", chapterId), { deletedAt: null });
+}
+
+export async function deleteChapterForever(chapterId) {
   return deleteDoc(doc(db, "chapters", chapterId));
 }
 
@@ -61,12 +121,23 @@ export async function getNotesByChapter(chapterId) {
   const snap = await getDocs(
     query(collection(db, "notes"), where("chapterId", "==", chapterId), orderBy("urutan", "asc"))
   );
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((n) => !n.deletedAt);
 }
 
 export async function getAllNotes() {
   const snap = await getDocs(query(collection(db, "notes"), orderBy("updatedAt", "desc")));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((n) => !n.deletedAt);
+}
+
+export async function getTrashedNotes() {
+  const snap = await getDocs(collection(db, "notes"));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((n) => !!n.deletedAt);
 }
 
 export async function getNote(noteId) {
@@ -81,10 +152,11 @@ export async function createNote({ chapterId, judul, tag }) {
     chapterId,
     judul: judul || "Catatan baru",
     tag: tag || [],
-    contentHtml: "<p>Mulai menulis di sini...</p>",
+    contentHtml: "",
     urutan: maxUrutan + 1,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
+    deletedAt: null,
   });
 }
 
@@ -92,7 +164,17 @@ export async function updateNote(noteId, data) {
   return updateDoc(doc(db, "notes", noteId), { ...data, updatedAt: serverTimestamp() });
 }
 
+/** Soft-delete: masuk Trash, belum benar-benar hilang. */
 export async function deleteNote(noteId) {
+  return updateDoc(doc(db, "notes", noteId), { deletedAt: serverTimestamp() });
+}
+
+export async function restoreNote(noteId) {
+  return updateDoc(doc(db, "notes", noteId), { deletedAt: null });
+}
+
+/** Penghapusan permanen — hanya dipanggil manual dari halaman Trash. */
+export async function deleteNoteForever(noteId) {
   return deleteDoc(doc(db, "notes", noteId));
 }
 

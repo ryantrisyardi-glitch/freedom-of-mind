@@ -277,6 +277,11 @@ button{ font-family: inherit; }
   cursor: pointer;
 }
 .editor-toolbar button:hover{ border-color: var(--terracotta-dim); }
+.editor-toolbar button.is-active{
+  background: var(--terracotta); border-color: var(--terracotta); color: var(--paper);
+}
+.editor-toolbar button:disabled{ opacity: 0.35; cursor: not-allowed; }
+.editor-toolbar button:disabled:hover{ border-color: var(--line); }
 
 .editor-area{
   padding: 28px 30px;
@@ -285,12 +290,44 @@ button{ font-family: inherit; }
   line-height: 1.85;
   outline: none;
 }
+.editor-area:empty::before{
+  content: attr(data-placeholder);
+  color: var(--sage);
+  opacity: 0.65;
+  pointer-events: none;
+}
 .editor-area::after{ content:""; display:block; clear:both; }
 .editor-area p{ margin: 0 0 1.2em; }
 .editor-area h2{ font-family: var(--font-display); font-size:1.5rem; margin: 1.2em 0 .5em; clear:both; }
 .editor-area h3{ font-family: var(--font-display); font-size:1.2rem; margin: 1em 0 .4em; clear:both; }
 .editor-area blockquote{
   border-left: 3px solid var(--terracotta-dim); margin: 20px 0; padding: 4px 0 4px 18px; color: var(--ink-soft); font-style: italic; clear:both;
+}
+.editor-area blockquote.quote-eyecatch,
+.note-content blockquote.quote-eyecatch{
+  border-left: none;
+  background: var(--paper-dim);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-style: normal;
+  font-weight: 600;
+  font-size: 1.45rem;
+  line-height: 1.4;
+  text-align: center;
+  padding: 28px 26px;
+  margin: 30px 0;
+  border-radius: 10px;
+  position: relative;
+}
+.editor-area blockquote.quote-eyecatch::before,
+.note-content blockquote.quote-eyecatch::before{
+  content: "\201C";
+  position: absolute;
+  top: -6px; left: 18px;
+  font-family: var(--font-display);
+  font-size: 3.2rem;
+  color: var(--terracotta-dim);
+  line-height: 1;
 }
 .editor-area mark{ background: var(--highlight); padding: 0.05em 0.15em; border-radius:2px; }
 .editor-area .divider{ text-align:center; color: var(--sage); letter-spacing:.3em; margin: 30px 0; font-size:12px; clear:both; }

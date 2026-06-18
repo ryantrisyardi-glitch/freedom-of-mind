@@ -2,8 +2,8 @@
 // HOME PAGE — grid chapter, tombol tambah chapter (admin only)
 // =========================================================
 
-import { initApp, onAuthReady, currentIsAdmin, showModal, showConfirm } from "./ui-shared.js";
-import { getAllChapters, createChapter, updateChapter, deleteChapter, getAllNotes } from "./data.js";
+import { initApp, onAuthReady, currentIsAdmin, showModal, showChoice } from "./ui-shared.js";
+import { getAllChapters, createChapter, updateChapter, deleteChapter, getAllNotes, QUICK_NOTES_NAME } from "./data.js";
 
 let chapters = [];
 let noteCounts = {};
@@ -91,13 +91,30 @@ async function handleEditChapter(id) {
 }
 
 async function handleDeleteChapter(id) {
+  const chapterToDelete = chapters.find((c) => c.id === id);
   const count = noteCounts[id] || 0;
-  const msg = count > 0
-    ? `Chapter ini berisi ${count} catatan. Menghapus chapter TIDAK menghapus catatan di dalamnya, tapi catatan akan jadi "tanpa chapter". Lanjutkan?`
-    : "Hapus chapter ini?";
-  const ok = await showConfirm(msg);
-  if (!ok) return;
-  await deleteChapter(id);
+
+  if (count === 0) {
+    const choice = await showChoice({
+      title: "Hapus chapter",
+      message: `Hapus chapter "${escapeHtml(chapterToDelete?.judul || "")}"? Chapter akan masuk Trash dan bisa dipulihkan nanti.`,
+      choices: [{ key: "delete", label: "Hapus chapter" }],
+    });
+    if (!choice) return;
+    await deleteChapter(id, "moveNotes");
+  } else {
+    const choice = await showChoice({
+      title: "Hapus chapter",
+      message: `Chapter "${escapeHtml(chapterToDelete?.judul || "")}" berisi ${count} catatan. Apa yang ingin dilakukan dengan catatan-catatan tersebut?`,
+      choices: [
+        { key: "move", label: `Pindahkan ke "${QUICK_NOTES_NAME}"` },
+        { key: "trash", label: "Hapus chapter & semua catatannya", danger: true },
+      ],
+    });
+    if (!choice) return;
+    await deleteChapter(id, choice === "move" ? "moveNotes" : "trashNotes");
+  }
+
   await loadAndRender();
 }
 

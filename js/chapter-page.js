@@ -92,7 +92,7 @@ async function handleAddNote() {
 }
 
 async function handleDeleteNote(noteId) {
-  const ok = await showConfirm("Hapus catatan ini? Tindakan ini tidak bisa dibatalkan.");
+  const ok = await showConfirm("Pindahkan catatan ini ke Trash? Kamu masih bisa memulihkannya nanti dari halaman Trash.");
   if (!ok) return;
   await deleteNote(noteId);
   notes = notes.filter((n) => n.id !== noteId);

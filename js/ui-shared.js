@@ -45,6 +45,7 @@ function renderTopnav() {
   const isSuper = currentUser.email?.toLowerCase() === (window.SUPERADMIN_EMAIL || "").toLowerCase();
   slot.innerHTML = `
     ${currentIsAdmin ? `<span class="badge-admin">admin</span>` : ""}
+    ${currentIsAdmin ? `<a class="btn-text" href="trash.html">trash</a>` : ""}
     ${isSuper ? `<a class="btn-text" href="admin.html">kelola admin</a>` : ""}
     <div class="user-chip">
       <img src="${currentUser.photoURL || ""}" alt="">
@@ -117,5 +118,34 @@ export function showConfirm(message) {
     overlay.querySelector("#confirmNo").addEventListener("click", () => cleanup(false));
     overlay.querySelector("#confirmYes").addEventListener("click", () => cleanup(true));
     overlay.addEventListener("click", (e) => { if (e.target === overlay) cleanup(false); });
+  });
+}
+
+/**
+ * Modal dengan beberapa pilihan tombol (lebih dari Ya/Tidak biasa).
+ * choices: [{key, label, danger?}]
+ * Mengembalikan Promise<string|null> -> key pilihan, atau null jika dibatalkan.
+ */
+export function showChoice({ title, message, choices }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.innerHTML = `
+      <div class="modal">
+        <h3>${title}</h3>
+        <p style="color:var(--ink-soft); margin-bottom:18px;">${message}</p>
+        <div class="modal__actions" style="flex-wrap:wrap;">
+          <button class="btn" id="choiceCancel">Batal</button>
+          ${choices.map((c) => `<button class="btn ${c.danger ? "btn-danger" : "btn-primary"}" data-choice="${c.key}">${c.label}</button>`).join("")}
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    function cleanup(v) { overlay.remove(); resolve(v); }
+    overlay.querySelector("#choiceCancel").addEventListener("click", () => cleanup(null));
+    overlay.querySelectorAll("[data-choice]").forEach((btn) =>
+      btn.addEventListener("click", () => cleanup(btn.dataset.choice))
+    );
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) cleanup(null); });
   });
 }

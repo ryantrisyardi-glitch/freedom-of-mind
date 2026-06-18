@@ -1,30 +1,123 @@
 // =========================================================
 // EDITOR — WYSIWYG ringan berbasis contenteditable
-// Toolbar: Bold, Italic, Underline, Heading, Quote, Highlight,
-// Bullet list, Insert image (kiri/kanan/tengah/full), Insert divider.
+// Toolbar: Bold, Italic, Underline, Highlight, Heading, Quote (2 gaya),
+// Bullet list, Undo/Redo, Insert image (kiri/kanan/tengah/full), Divider.
 // =========================================================
 
 let editorEl = null;
 let onChangeCallback = null;
 
-function exec(command, value = null) {
-  document.execCommand(command, false, value);
-  editorEl.focus();
+// ---------- Riwayat undo/redo manual ----------
+// document.execCommand("undo") bawaan browser tidak konsisten di mobile
+// (terutama Android Chrome & in-app browser), jadi kita kelola sendiri.
+let history = [];
+let historyIndex = -1;
+let isRestoringHistory = false;
+const MAX_HISTORY = 100;
+
+function pushHistory() {
+  if (isRestoringHistory) return;
+  const html = editorEl.innerHTML;
+  if (history[historyIndex] === html) return; // tidak ada perubahan nyata
+  history = history.slice(0, historyIndex + 1);
+  history.push(html);
+  if (history.length > MAX_HISTORY) history.shift();
+  historyIndex = history.length - 1;
+  updateUndoRedoButtons();
+}
+
+function undo() {
+  if (historyIndex <= 0) return;
+  historyIndex--;
+  restoreHistoryAt(historyIndex);
+}
+
+function redo() {
+  if (historyIndex >= history.length - 1) return;
+  historyIndex++;
+  restoreHistoryAt(historyIndex);
+}
+
+function restoreHistoryAt(idx) {
+  isRestoringHistory = true;
+  editorEl.innerHTML = history[idx];
+  isRestoringHistory = false;
+  updateUndoRedoButtons();
   triggerChange();
 }
+
+function updateUndoRedoButtons() {
+  const undoBtn = document.querySelector('[data-cmd="undo"]');
+  const redoBtn = document.querySelector('[data-cmd="redo"]');
+  if (undoBtn) undoBtn.disabled = historyIndex <= 0;
+  if (redoBtn) redoBtn.disabled = historyIndex >= history.length - 1;
+}
+
+let historyDebounce = null;
+function scheduleHistoryPush() {
+  clearTimeout(historyDebounce);
+  historyDebounce = setTimeout(pushHistory, 400);
+}
+
+// ---------- Helpers umum ----------
 
 function triggerChange() {
   if (onChangeCallback) onChangeCallback(editorEl.innerHTML);
 }
 
-function wrapSelectionWithHighlight() {
+/**
+ * Saat user menghapus semua isi (Backspace berulang), contenteditable
+ * sering menyisakan elemen kosong seperti "<p><br></p>" yang membuat
+ * placeholder CSS (:empty::before) tidak muncul lagi meski terlihat
+ * kosong. Fungsi ini membersihkannya jadi benar-benar kosong.
+ */
+function normalizeEmptyState() {
+  const plainText = editorEl.textContent.replace(/\u200B/g, "").trim();
+  const hasMedia = editorEl.querySelector("img, figure");
+  if (!plainText && !hasMedia) {
+    editorEl.innerHTML = "";
+  }
+}
+
+function exec(command, value = null) {
+  document.execCommand(command, false, value);
+  editorEl.focus();
+  scheduleHistoryPush();
+  triggerChange();
+  updateToolbarState();
+}
+
+/**
+ * Menyisipkan/melepas <mark> pada seleksi saat ini (toggle highlight asli,
+ * bukan cuma menambah terus — jadi bisa benar-benar dimatikan).
+ */
+function toggleHighlight() {
   const sel = window.getSelection();
   if (!sel.rangeCount || sel.isCollapsed) return;
   const range = sel.getRangeAt(0);
+
+  // Jika seleksi sudah berada di dalam <mark>, lepas highlight-nya.
+  let node = range.commonAncestorContainer;
+  let markEl = node.nodeType === 3 ? node.parentElement : node;
+  while (markEl && markEl !== editorEl) {
+    if (markEl.tagName === "MARK") {
+      const parent = markEl.parentNode;
+      while (markEl.firstChild) parent.insertBefore(markEl.firstChild, markEl);
+      parent.removeChild(markEl);
+      sel.removeAllRanges();
+      scheduleHistoryPush();
+      triggerChange();
+      return;
+    }
+    markEl = markEl.parentElement;
+  }
+
+  // Belum di-highlight -> bungkus dengan <mark>
   const mark = document.createElement("mark");
   mark.appendChild(range.extractContents());
   range.insertNode(mark);
   sel.removeAllRanges();
+  scheduleHistoryPush();
   triggerChange();
 }
 
@@ -36,8 +129,27 @@ function insertParagraph() {
   exec("formatBlock", "<p>");
 }
 
-function insertQuote() {
-  exec("formatBlock", "<blockquote>");
+/**
+ * Dua gaya quote:
+ *  - "line"  : kutipan bergaris pinggir tipis (gaya lama, untuk kutipan biasa)
+ *  - "eye"   : kutipan besar eye-catching (untuk kalimat kunci yang mau ditonjolkan)
+ */
+function insertQuote(style = "line") {
+  const sel = window.getSelection();
+  const selectedText = sel.rangeCount ? sel.toString() : "";
+
+  if (style === "eye") {
+    const bq = document.createElement("blockquote");
+    bq.className = "quote-eyecatch";
+    bq.textContent = selectedText || "Kutipan menarik...";
+    insertNodeAtCursor(bq);
+    insertNodeAtCursor(document.createElement("p"));
+  } else {
+    exec("formatBlock", "<blockquote>");
+    return;
+  }
+  scheduleHistoryPush();
+  triggerChange();
 }
 
 function insertDivider() {
@@ -47,12 +159,13 @@ function insertDivider() {
   hr.textContent = "• • •";
   insertNodeAtCursor(hr);
   insertNodeAtCursor(document.createElement("p"));
+  scheduleHistoryPush();
   triggerChange();
 }
 
 function insertNodeAtCursor(node) {
   const sel = window.getSelection();
-  if (!sel.rangeCount) {
+  if (!sel.rangeCount || !editorEl.contains(sel.getRangeAt(0).commonAncestorContainer)) {
     editorEl.appendChild(node);
     return;
   }
@@ -67,7 +180,6 @@ function insertNodeAtCursor(node) {
 
 /**
  * Membuat figure gambar dengan posisi float tertentu.
- * position: "left" | "right" | "center" | "full"
  */
 function buildImageFigure(url, position) {
   const figure = document.createElement("figure");
@@ -90,6 +202,7 @@ function buildImageFigure(url, position) {
     btn.dataset.pos = pos;
     btn.title = "Posisikan: " + pos;
     btn.textContent = { left: "⇤", center: "⇔", right: "⇥", full: "⬜" }[pos];
+    btn.addEventListener("mousedown", (e) => e.preventDefault());
     btn.addEventListener("click", (e) => {
       e.preventDefault();
       figure.className = `img-pos-${pos}`;
@@ -97,6 +210,7 @@ function buildImageFigure(url, position) {
       controls.querySelectorAll(".img-controls__btn").forEach((b) =>
         b.classList.toggle("is-active", b.dataset.pos === pos)
       );
+      scheduleHistoryPush();
       triggerChange();
     });
     controls.appendChild(btn);
@@ -106,9 +220,11 @@ function buildImageFigure(url, position) {
   removeBtn.className = "img-controls__btn img-controls__btn--remove";
   removeBtn.title = "Hapus gambar";
   removeBtn.textContent = "✕";
+  removeBtn.addEventListener("mousedown", (e) => e.preventDefault());
   removeBtn.addEventListener("click", (e) => {
     e.preventDefault();
     figure.remove();
+    scheduleHistoryPush();
     triggerChange();
   });
   controls.appendChild(removeBtn);
@@ -160,6 +276,7 @@ async function insertImage(position) {
       const p = document.createElement("p");
       p.innerHTML = "<br>";
       insertNodeAtCursor(p);
+      scheduleHistoryPush();
       triggerChange();
     } catch (err) {
       alert("Gagal mengunggah gambar: " + err.message);
@@ -170,7 +287,38 @@ async function insertImage(position) {
   input.click();
 }
 
+// ---------- Status tombol (bold/italic/underline aktif atau tidak) ----------
+
+function isSelectionInsideTag(tagName) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return false;
+  let node = sel.getRangeAt(0).commonAncestorContainer;
+  node = node.nodeType === 3 ? node.parentElement : node;
+  while (node && node !== editorEl) {
+    if (node.tagName === tagName) return true;
+    node = node.parentElement;
+  }
+  return false;
+}
+
+function updateToolbarState() {
+  const map = {
+    bold: () => { try { return document.queryCommandState("bold"); } catch { return false; } },
+    italic: () => { try { return document.queryCommandState("italic"); } catch { return false; } },
+    underline: () => { try { return document.queryCommandState("underline"); } catch { return false; } },
+    highlight: () => isSelectionInsideTag("MARK"),
+  };
+  Object.entries(map).forEach(([cmd, check]) => {
+    const btn = document.querySelector(`[data-cmd="${cmd}"]`);
+    if (btn) btn.classList.toggle("is-active", !!check());
+  });
+}
+
 const TOOLBAR_HTML = `
+  <div class="toolbar-group">
+    <button data-cmd="undo" title="Urungkan (Ctrl+Z)" disabled>↶</button>
+    <button data-cmd="redo" title="Ulangi (Ctrl+Shift+Z)" disabled>↷</button>
+  </div>
   <div class="toolbar-group">
     <button data-cmd="bold" title="Tebal (Ctrl+B)"><strong>B</strong></button>
     <button data-cmd="italic" title="Miring (Ctrl+I)"><em>I</em></button>
@@ -181,14 +329,17 @@ const TOOLBAR_HTML = `
     <button data-cmd="h2" title="Judul bagian">H2</button>
     <button data-cmd="h3" title="Sub-judul">H3</button>
     <button data-cmd="p" title="Paragraf normal">¶</button>
-    <button data-cmd="quote" title="Kutipan">"</button>
+  </div>
+  <div class="toolbar-group">
+    <button data-cmd="quote-line" title="Kutipan biasa">" biasa</button>
+    <button data-cmd="quote-eye" title="Kutipan besar mencolok">" besar</button>
   </div>
   <div class="toolbar-group">
     <button data-cmd="ul" title="Daftar berpoin">• List</button>
     <button data-cmd="divider" title="Pembatas">⋯</button>
   </div>
   <div class="toolbar-group">
-    <span class="toolbar-label">Sisipkan gambar:</span>
+    <span class="toolbar-label">Gambar:</span>
     <button data-cmd="img-left" title="Gambar di kiri, teks di kanan">⇤ Kiri</button>
     <button data-cmd="img-right" title="Gambar di kanan, teks di kiri">Kanan ⇥</button>
     <button data-cmd="img-center" title="Gambar di tengah">⇔ Tengah</button>
@@ -198,32 +349,42 @@ const TOOLBAR_HTML = `
 
 /**
  * Inisialisasi editor pada elemen tertentu.
- * @param {HTMLElement} containerEl - elemen yang akan diisi toolbar + area edit
- * @param {string} initialHtml - konten awal
- * @param {function} onChange - callback(html) setiap kali ada perubahan
  */
 export function initEditor(containerEl, initialHtml, onChange) {
   onChangeCallback = onChange;
   containerEl.innerHTML = `
     <div class="editor-toolbar" id="editorToolbar">${TOOLBAR_HTML}</div>
-    <div class="editor-area" id="editorArea" contenteditable="true"></div>
+    <div class="editor-area" id="editorArea" contenteditable="true" data-placeholder="Mulai menulis di sini..."></div>
   `;
   editorEl = containerEl.querySelector("#editorArea");
-  editorEl.innerHTML = initialHtml || "<p>Mulai menulis di sini...</p>";
+  editorEl.innerHTML = initialHtml && initialHtml.trim() ? initialHtml : "";
 
+  // riwayat awal
+  history = [editorEl.innerHTML];
+  historyIndex = 0;
+
+  // PENTING: mousedown preventDefault mencegah browser memindahkan fokus
+  // ke tombol toolbar sebelum click diproses — inilah sumber bug
+  // "bold/italic/highlight selalu ON": tanpa ini, seleksi teks hilang
+  // duluan sehingga execCommand dieksekusi pada posisi yang salah.
   containerEl.querySelectorAll(".editor-toolbar button").forEach((btn) => {
+    btn.addEventListener("mousedown", (e) => e.preventDefault());
     btn.addEventListener("click", (e) => {
       e.preventDefault();
+      if (btn.disabled) return;
       const cmd = btn.dataset.cmd;
       switch (cmd) {
+        case "undo": undo(); break;
+        case "redo": redo(); break;
         case "bold": exec("bold"); break;
         case "italic": exec("italic"); break;
         case "underline": exec("underline"); break;
-        case "highlight": wrapSelectionWithHighlight(); break;
+        case "highlight": toggleHighlight(); editorEl.focus(); updateToolbarState(); break;
         case "h2": insertHeading(2); break;
         case "h3": insertHeading(3); break;
         case "p": insertParagraph(); break;
-        case "quote": insertQuote(); break;
+        case "quote-line": insertQuote("line"); break;
+        case "quote-eye": insertQuote("eye"); break;
         case "ul": exec("insertUnorderedList"); break;
         case "divider": insertDivider(); break;
         case "img-left": insertImage("left"); break;
@@ -234,7 +395,30 @@ export function initEditor(containerEl, initialHtml, onChange) {
     });
   });
 
-  editorEl.addEventListener("input", triggerChange);
+  editorEl.addEventListener("input", () => {
+    normalizeEmptyState();
+    triggerChange();
+    scheduleHistoryPush();
+  });
+  editorEl.addEventListener("keyup", updateToolbarState);
+  editorEl.addEventListener("mouseup", updateToolbarState);
+  document.addEventListener("selectionchange", () => {
+    if (document.activeElement === editorEl || editorEl.contains(document.activeElement)) {
+      updateToolbarState();
+    }
+  });
+
+  // Shortcut keyboard: Ctrl+Z / Ctrl+Shift+Z (juga membantu di keyboard eksternal mobile)
+  editorEl.addEventListener("keydown", (e) => {
+    const ctrlOrCmd = e.ctrlKey || e.metaKey;
+    if (ctrlOrCmd && e.key.toLowerCase() === "z" && !e.shiftKey) {
+      e.preventDefault();
+      undo();
+    } else if (ctrlOrCmd && ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y")) {
+      e.preventDefault();
+      redo();
+    }
+  });
 
   // Drag & drop gambar langsung ke editor (default: full-width)
   editorEl.addEventListener("dragover", (e) => e.preventDefault());
@@ -247,6 +431,7 @@ export function initEditor(containerEl, initialHtml, onChange) {
         if (url) {
           const figure = buildImageFigure(url, "full");
           insertNodeAtCursor(figure);
+          scheduleHistoryPush();
           triggerChange();
         }
       } catch (err) {
@@ -255,6 +440,7 @@ export function initEditor(containerEl, initialHtml, onChange) {
     }
   });
 
+  updateUndoRedoButtons();
   return editorEl;
 }
 
