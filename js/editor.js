@@ -279,73 +279,78 @@ const STICKY_COLORS = [
   "#E1BEE7", // ungu lembut
 ];
 
+let stickyCounter = 0;
+
 function insertStickyNote() {
   const color = STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
+  const id = "sticky-" + (++stickyCounter);
 
-  // Outer wrapper: NOT editable — so button clicks register properly
-  const wrapper = document.createElement("div");
-  wrapper.className = "sticky-note-wrapper";
-  wrapper.contentEditable = "false";
+  // Seluruh struktur pakai data-attribute, event ditangani via delegation di editorEl
+  const colorDotsHtml = STICKY_COLORS.map(c =>
+    `<button type="button" class="sticky-note__color-dot${c === color ? " is-active" : ""}"
+      data-sticky-action="color" data-sticky-id="${id}" data-color="${c}"
+      style="background:${c}" title="Ganti warna"></button>`
+  ).join("");
 
-  const sticky = document.createElement("div");
-  sticky.className = "sticky-note";
-  sticky.style.background = color;
+  const html = `
+    <div class="sticky-note-wrapper" data-sticky-id="${id}" contenteditable="false">
+      <div class="sticky-note" style="background:${color}" data-sticky-id="${id}">
+        <div class="sticky-note__controls">
+          ${colorDotsHtml}
+          <button type="button" class="sticky-note__remove"
+            data-sticky-action="remove" data-sticky-id="${id}" title="Hapus">✕</button>
+        </div>
+        <div class="sticky-note__text" contenteditable="true" data-sticky-id="${id}">Catatan...</div>
+      </div>
+    </div>
+  `;
 
-  // Controls bar (color dots + remove)
-  const controls = document.createElement("div");
-  controls.className = "sticky-note__controls";
-
-  STICKY_COLORS.forEach(c => {
-    const dot = document.createElement("button");
-    dot.type = "button";
-    dot.className = "sticky-note__color-dot" + (c === color ? " is-active" : "");
-    dot.style.background = c;
-    dot.title = "Ganti warna";
-    dot.addEventListener("click", e => {
-      e.preventDefault();
-      e.stopPropagation();
-      sticky.style.background = c;
-      controls.querySelectorAll(".sticky-note__color-dot").forEach(d => d.classList.remove("is-active"));
-      dot.classList.add("is-active");
-      scheduleHistoryPush();
-      triggerChange();
-    });
-    controls.appendChild(dot);
-  });
-
-  const removeBtn = document.createElement("button");
-  removeBtn.type = "button";
-  removeBtn.className = "sticky-note__remove";
-  removeBtn.title = "Hapus sticky note";
-  removeBtn.textContent = "✕";
-  removeBtn.addEventListener("click", e => {
-    e.preventDefault();
-    e.stopPropagation();
-    wrapper.remove();
-    scheduleHistoryPush();
-    triggerChange();
-  });
-  controls.appendChild(removeBtn);
-
-  // Inner editable text area
-  const textArea = document.createElement("div");
-  textArea.className = "sticky-note__text";
-  textArea.contentEditable = "true";
-  textArea.textContent = "Catatan...";
-  textArea.addEventListener("focus", () => { if (textArea.textContent === "Catatan...") { textArea.textContent = ""; } });
-  textArea.addEventListener("blur", () => { if (!textArea.textContent.trim()) { textArea.textContent = "Catatan..."; } });
-  textArea.addEventListener("input", () => { scheduleHistoryPush(); triggerChange(); });
-
-  sticky.appendChild(controls);
-  sticky.appendChild(textArea);
-  wrapper.appendChild(sticky);
-
+  // Insert sebagai node
+  const temp = document.createElement("div");
+  temp.innerHTML = html;
+  const wrapper = temp.firstElementChild;
   insertNodeAtCursor(wrapper);
+
   const p = document.createElement("p");
   p.innerHTML = "<br>";
   insertNodeAtCursor(p);
+
   scheduleHistoryPush();
   triggerChange();
+}
+
+// Dipanggil sekali saat initEditor — delegasi semua event sticky note ke editorEl
+function setupStickyDelegation() {
+  // Gunakan mousedown+pointerup agar tidak kehilangan event di mobile contenteditable
+  editorEl.addEventListener("mousedown", handleStickyInteraction);
+  editorEl.addEventListener("touchend", handleStickyInteraction);
+}
+
+function handleStickyInteraction(e) {
+  const btn = e.target.closest("[data-sticky-action]");
+  if (!btn) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const action = btn.dataset.stickyAction;
+  const id = btn.dataset.stickyId;
+  const wrapper = editorEl.querySelector(`.sticky-note-wrapper[data-sticky-id="${id}"]`);
+  const sticky = editorEl.querySelector(`.sticky-note[data-sticky-id="${id}"]`);
+
+  if (action === "remove") {
+    wrapper?.remove();
+    scheduleHistoryPush();
+    triggerChange();
+  } else if (action === "color") {
+    const color = btn.dataset.color;
+    if (sticky) sticky.style.background = color;
+    // Update active dot
+    editorEl.querySelectorAll(`[data-sticky-action="color"][data-sticky-id="${id}"]`)
+      .forEach(d => d.classList.toggle("is-active", d.dataset.color === color));
+    scheduleHistoryPush();
+    triggerChange();
+  }
 }
 
 // ---------- Heading / Quote / Divider ----------
@@ -735,6 +740,9 @@ export function initEditor(containerEl, initialHtml, onChange) {
 
   history = [editorEl.innerHTML];
   historyIndex = 0;
+
+  // Delegasi event sticky note (hapus & ganti warna)
+  setupStickyDelegation();
 
   // Setup tombol toolbar utama
   const highlightBtn = containerEl.querySelector('[data-cmd="highlight"]');
