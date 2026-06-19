@@ -70,11 +70,41 @@ function normalizeEmptyState() {
 }
 
 function exec(command, value = null) {
-  document.execCommand(command, false, value);
   editorEl.focus();
+  document.execCommand(command, false, value);
   scheduleHistoryPush();
   triggerChange();
   updateToolbarState();
+  updateFloatingToolbarState();
+}
+
+// Toggle block-level format: jika sudah dalam tag tsb, kembalikan ke <p>
+function toggleBlock(tag) {
+  editorEl.focus();
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  let node = sel.getRangeAt(0).commonAncestorContainer;
+  node = node.nodeType === 3 ? node.parentElement : node;
+  const match = node.closest ? node.closest(tag) : null;
+  if (match) {
+    document.execCommand("formatBlock", false, "<p>");
+  } else {
+    document.execCommand("formatBlock", false, `<${tag}>`);
+  }
+  scheduleHistoryPush();
+  triggerChange();
+  updateToolbarState();
+  updateFloatingToolbarState();
+}
+
+// Toggle list
+function toggleList() {
+  editorEl.focus();
+  document.execCommand("insertUnorderedList", false, null);
+  scheduleHistoryPush();
+  triggerChange();
+  updateToolbarState();
+  updateFloatingToolbarState();
 }
 
 // ---------- Highlight dengan warna ----------
@@ -251,25 +281,29 @@ const STICKY_COLORS = [
 
 function insertStickyNote() {
   const color = STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
+
+  // Outer wrapper: NOT editable — so button clicks register properly
+  const wrapper = document.createElement("div");
+  wrapper.className = "sticky-note-wrapper";
+  wrapper.contentEditable = "false";
+
   const sticky = document.createElement("div");
   sticky.className = "sticky-note";
-  sticky.contentEditable = "true";
-  sticky.dataset.sticky = "true";
   sticky.style.background = color;
-  sticky.textContent = "Catatan...";
 
-  // Tombol ubah warna & hapus
+  // Controls bar (color dots + remove)
   const controls = document.createElement("div");
   controls.className = "sticky-note__controls";
-  controls.contentEditable = "false";
+
   STICKY_COLORS.forEach(c => {
     const dot = document.createElement("button");
+    dot.type = "button";
     dot.className = "sticky-note__color-dot" + (c === color ? " is-active" : "");
     dot.style.background = c;
     dot.title = "Ganti warna";
-    dot.addEventListener("mousedown", e => e.preventDefault());
     dot.addEventListener("click", e => {
       e.preventDefault();
+      e.stopPropagation();
       sticky.style.background = c;
       controls.querySelectorAll(".sticky-note__color-dot").forEach(d => d.classList.remove("is-active"));
       dot.classList.add("is-active");
@@ -280,20 +314,33 @@ function insertStickyNote() {
   });
 
   const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
   removeBtn.className = "sticky-note__remove";
   removeBtn.title = "Hapus sticky note";
   removeBtn.textContent = "✕";
-  removeBtn.addEventListener("mousedown", e => e.preventDefault());
   removeBtn.addEventListener("click", e => {
     e.preventDefault();
-    sticky.remove();
+    e.stopPropagation();
+    wrapper.remove();
     scheduleHistoryPush();
     triggerChange();
   });
   controls.appendChild(removeBtn);
-  sticky.prepend(controls);
 
-  insertNodeAtCursor(sticky);
+  // Inner editable text area
+  const textArea = document.createElement("div");
+  textArea.className = "sticky-note__text";
+  textArea.contentEditable = "true";
+  textArea.textContent = "Catatan...";
+  textArea.addEventListener("focus", () => { if (textArea.textContent === "Catatan...") { textArea.textContent = ""; } });
+  textArea.addEventListener("blur", () => { if (!textArea.textContent.trim()) { textArea.textContent = "Catatan..."; } });
+  textArea.addEventListener("input", () => { scheduleHistoryPush(); triggerChange(); });
+
+  sticky.appendChild(controls);
+  sticky.appendChild(textArea);
+  wrapper.appendChild(sticky);
+
+  insertNodeAtCursor(wrapper);
   const p = document.createElement("p");
   p.innerHTML = "<br>";
   insertNodeAtCursor(p);
@@ -303,24 +350,40 @@ function insertStickyNote() {
 
 // ---------- Heading / Quote / Divider ----------
 
-function insertHeading(level) { exec("formatBlock", `<h${level}>`); }
-function insertParagraph() { exec("formatBlock", "<p>"); }
+function insertHeading(level) { toggleBlock(`h${level}`); }
+function insertParagraph() {
+  editorEl.focus();
+  document.execCommand("formatBlock", false, "<p>");
+  scheduleHistoryPush(); triggerChange(); updateToolbarState(); updateFloatingToolbarState();
+}
 
 function insertQuote(style = "line") {
   const sel = window.getSelection();
   const selectedText = sel.rangeCount ? sel.toString() : "";
   if (style === "eye") {
-    const bq = document.createElement("blockquote");
-    bq.className = "quote-eyecatch";
-    bq.textContent = selectedText || "Kutipan menarik...";
-    insertNodeAtCursor(bq);
-    insertNodeAtCursor(document.createElement("p"));
+    // Toggle: jika sudah di dalam quote-eyecatch, hapus wrapper-nya
+    let node = sel.rangeCount ? sel.getRangeAt(0).commonAncestorContainer : null;
+    node = node && node.nodeType === 3 ? node.parentElement : node;
+    const existing = node && node.closest ? node.closest(".quote-eyecatch") : null;
+    if (existing) {
+      const p = document.createElement("p");
+      p.textContent = existing.textContent;
+      existing.replaceWith(p);
+    } else {
+      const bq = document.createElement("blockquote");
+      bq.className = "quote-eyecatch";
+      bq.textContent = selectedText || "Kutipan menarik...";
+      insertNodeAtCursor(bq);
+      insertNodeAtCursor(document.createElement("p"));
+    }
   } else {
-    exec("formatBlock", "<blockquote>");
+    toggleBlock("blockquote");
     return;
   }
   scheduleHistoryPush();
   triggerChange();
+  updateToolbarState();
+  updateFloatingToolbarState();
 }
 
 function insertDivider() {
@@ -601,7 +664,7 @@ function dispatchCmd(cmd) {
     case "p": insertParagraph(); break;
     case "quote-line": insertQuote("line"); break;
     case "quote-eye": insertQuote("eye"); break;
-    case "ul": exec("insertUnorderedList"); break;
+    case "ul": toggleList(); break;
     case "divider": insertDivider(); break;
     case "img-left": insertImage("left"); break;
     case "img-right": insertImage("right"); break;
@@ -630,11 +693,32 @@ function updateFloatingToolbarState() {
 
 function checkFloatingToolbarVisibility() {
   if (!floatingToolbarEl) return;
-  const toolbar = document.getElementById("editorToolbar");
-  if (!toolbar) return;
-  const rect = toolbar.getBoundingClientRect();
-  floatingToolbarEl.classList.toggle("is-visible", rect.bottom < 0);
-  if (rect.bottom < 0) updateFloatingToolbarState();
+  const isMobile = window.innerWidth <= 768;
+  if (isMobile) {
+    // Pada mobile: selalu tampilkan saat editor aktif (keyboard terbuka)
+    const isEditorFocused = document.activeElement === editorEl || editorEl.contains(document.activeElement);
+    floatingToolbarEl.classList.toggle("is-visible", isEditorFocused);
+    positionFloatingToolbarAboveKeyboard();
+  } else {
+    // Desktop: tampilkan saat toolbar asli tergulir ke atas
+    const toolbar = document.getElementById("editorToolbar");
+    if (!toolbar) return;
+    const rect = toolbar.getBoundingClientRect();
+    floatingToolbarEl.classList.toggle("is-visible", rect.bottom < 0);
+  }
+  updateFloatingToolbarState();
+}
+
+function positionFloatingToolbarAboveKeyboard() {
+  if (!floatingToolbarEl) return;
+  // Gunakan visualViewport API jika tersedia (iOS/Android)
+  if (window.visualViewport) {
+    const vv = window.visualViewport;
+    const bottomOfViewport = vv.offsetTop + vv.height;
+    floatingToolbarEl.style.bottom = (window.innerHeight - bottomOfViewport + 8) + "px";
+  } else {
+    floatingToolbarEl.style.bottom = "8px";
+  }
 }
 
 /**
@@ -715,6 +799,32 @@ export function initEditor(containerEl, initialHtml, onChange) {
   window.addEventListener("scroll", checkFloatingToolbarVisibility, { passive: true });
   editorEl.addEventListener("keyup", updateFloatingToolbarState);
   editorEl.addEventListener("mouseup", updateFloatingToolbarState);
+
+  // Mobile: tampilkan/sembunyikan floating toolbar berdasarkan fokus dan keyboard
+  editorEl.addEventListener("focus", () => {
+    if (window.innerWidth <= 768) {
+      floatingToolbarEl.classList.add("is-visible");
+      positionFloatingToolbarAboveKeyboard();
+    }
+  });
+  editorEl.addEventListener("blur", e => {
+    // Jangan sembunyikan jika yang diklik adalah tombol di floating toolbar
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (!floatingToolbarEl.contains(active) && active !== editorEl && !editorEl.contains(active)) {
+        if (window.innerWidth <= 768) floatingToolbarEl.classList.remove("is-visible");
+      }
+    }, 150);
+  });
+
+  // Visualviewport (keyboard muncul/hilang di mobile)
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", () => {
+      positionFloatingToolbarAboveKeyboard();
+      checkFloatingToolbarVisibility();
+    });
+    window.visualViewport.addEventListener("scroll", positionFloatingToolbarAboveKeyboard);
+  }
 
   return editorEl;
 }
