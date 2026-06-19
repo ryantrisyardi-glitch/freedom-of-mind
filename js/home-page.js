@@ -31,9 +31,10 @@ function render() {
       : `<div class="empty-state">Belum ada catatan yang dipublikasikan.</div>`;
   } else {
     grid.innerHTML = chapters.map((c) => `
-      <article class="chapter-card">
+      <article class="chapter-card is-clickable" data-id="${c.id}" data-href="chapter.html?id=${c.id}">
+        ${currentIsAdmin ? `<span class="sortable-drag-handle" draggable="false" title="Seret untuk urutkan">⠿</span>` : ""}
         <div class="chapter-card__count">${noteCounts[c.id] || 0} catatan</div>
-        <h2><a href="chapter.html?id=${c.id}">${escapeHtml(c.judul)}</a></h2>
+        <h2><a href="chapter.html?id=${c.id}" class="card-link">${escapeHtml(c.judul)}</a></h2>
         <p>${escapeHtml(c.deskripsi || "")}</p>
         ${currentIsAdmin ? `
           <div class="chapter-card__admin-row">
@@ -50,12 +51,81 @@ function render() {
 
   document.getElementById("addChapterBtn")?.addEventListener("click", handleAddChapter);
   grid.querySelectorAll("[data-edit]").forEach((btn) =>
-    btn.addEventListener("click", () => handleEditChapter(btn.dataset.edit))
+    btn.addEventListener("click", (e) => { e.stopPropagation(); handleEditChapter(btn.dataset.edit); })
   );
   grid.querySelectorAll("[data-del]").forEach((btn) =>
-    btn.addEventListener("click", () => handleDeleteChapter(btn.dataset.del))
+    btn.addEventListener("click", (e) => { e.stopPropagation(); handleDeleteChapter(btn.dataset.del); })
   );
+
+  // Klik pada card untuk navigasi (fix #3)
+  grid.querySelectorAll(".chapter-card.is-clickable").forEach((card) => {
+    card.addEventListener("click", (e) => {
+      if (e.target.closest("button") || e.target.closest("a") || e.target.closest(".sortable-drag-handle")) return;
+      location.href = card.dataset.href;
+    });
+  });
+
+  // Drag & drop sort (admin only, fix #2)
+  if (currentIsAdmin) {
+    initChapterDragSort(grid);
+  }
 }
+
+function initChapterDragSort(grid) {
+  let dragSrc = null;
+
+  grid.querySelectorAll(".chapter-card").forEach((card) => {
+    card.setAttribute("draggable", "true");
+
+    card.addEventListener("dragstart", (e) => {
+      dragSrc = card;
+      card.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+      grid.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+      dragSrc = null;
+    });
+
+    card.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (card !== dragSrc) {
+        grid.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+        card.classList.add("drag-over");
+      }
+    });
+
+    card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
+
+    card.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      card.classList.remove("drag-over");
+      if (!dragSrc || dragSrc === card) return;
+
+      // Reorder in DOM
+      const cards = [...grid.querySelectorAll(".chapter-card")];
+      const srcIdx = cards.indexOf(dragSrc);
+      const dstIdx = cards.indexOf(card);
+      if (srcIdx < dstIdx) card.after(dragSrc); else card.before(dragSrc);
+
+      // Rebuild order array and persist
+      const newOrder = [...grid.querySelectorAll(".chapter-card")].map((c) => c.dataset.id);
+      await saveChapterOrder(newOrder);
+    });
+  });
+}
+
+async function saveChapterOrder(orderedIds) {
+  await Promise.all(
+    orderedIds.map((id, idx) => updateChapter(id, { urutan: idx + 1 }))
+  );
+  // Update local chapters array order
+  chapters.sort((a, b) => orderedIds.indexOf(a.id) - orderedIds.indexOf(b.id));
+}
+
 
 function escapeHtml(str) {
   return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

@@ -3,7 +3,7 @@
 // =========================================================
 
 import { initApp, onAuthReady, currentIsAdmin, showModal, showConfirm } from "./ui-shared.js";
-import { getChapter, getNotesByChapter, createNote, deleteNote } from "./data.js";
+import { getChapter, getNotesByChapter, createNote, deleteNote, updateNote } from "./data.js";
 
 function getChapterId() {
   return new URLSearchParams(location.search).get("id");
@@ -59,9 +59,10 @@ function render() {
     return;
   }
   list.innerHTML = notes.map((n) => `
-    <article class="note-row">
+    <article class="note-row is-clickable" data-id="${n.id}" data-href="note.html?id=${n.id}">
+      ${currentIsAdmin ? `<span class="sortable-drag-handle" title="Seret untuk urutkan">⠿</span>` : ""}
       <div class="note-row__main">
-        <h3><a href="note.html?id=${n.id}">${escapeHtml(n.judul)}</a></h3>
+        <h3><a href="note.html?id=${n.id}" class="card-link">${escapeHtml(n.judul)}</a></h3>
         <div class="note-row__meta">
           <span>${formatTanggal(n.updatedAt)}</span>
           <div class="note-row__tags">${(n.tag || []).map((t) => `<span>#${escapeHtml(t)}</span>`).join("")}</div>
@@ -75,9 +76,80 @@ function render() {
     </article>
   `).join("");
 
+  // Hapus handler
   list.querySelectorAll("[data-del]").forEach((btn) =>
-    btn.addEventListener("click", () => handleDeleteNote(btn.dataset.del))
+    btn.addEventListener("click", (e) => { e.stopPropagation(); handleDeleteNote(btn.dataset.del); })
   );
+
+  // Edit link — stop propagation
+  list.querySelectorAll(".btn-icon[href]").forEach((a) =>
+    a.addEventListener("click", (e) => e.stopPropagation())
+  );
+
+  // Klik pada row untuk navigasi (fix #3)
+  list.querySelectorAll(".note-row.is-clickable").forEach((row) => {
+    row.addEventListener("click", (e) => {
+      if (e.target.closest("button") || e.target.closest("a") || e.target.closest(".sortable-drag-handle")) return;
+      location.href = row.dataset.href;
+    });
+  });
+
+  // Drag & drop sort (admin only, fix #2)
+  if (currentIsAdmin) {
+    initNoteDragSort(list);
+  }
+}
+
+function initNoteDragSort(list) {
+  let dragSrc = null;
+
+  list.querySelectorAll(".note-row").forEach((row) => {
+    row.setAttribute("draggable", "true");
+
+    row.addEventListener("dragstart", (e) => {
+      dragSrc = row;
+      row.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+
+    row.addEventListener("dragend", () => {
+      row.classList.remove("dragging");
+      list.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+      dragSrc = null;
+    });
+
+    row.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (row !== dragSrc) {
+        list.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+        row.classList.add("drag-over");
+      }
+    });
+
+    row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+
+    row.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      row.classList.remove("drag-over");
+      if (!dragSrc || dragSrc === row) return;
+
+      const rows = [...list.querySelectorAll(".note-row")];
+      const srcIdx = rows.indexOf(dragSrc);
+      const dstIdx = rows.indexOf(row);
+      if (srcIdx < dstIdx) row.after(dragSrc); else row.before(dragSrc);
+
+      const newOrder = [...list.querySelectorAll(".note-row")].map((r) => r.dataset.id);
+      await saveNoteOrder(newOrder);
+    });
+  });
+}
+
+async function saveNoteOrder(orderedIds) {
+  await Promise.all(
+    orderedIds.map((id, idx) => updateNote(id, { urutan: idx + 1 }))
+  );
+  notes.sort((a, b) => orderedIds.indexOf(a.id) - orderedIds.indexOf(b.id));
 }
 
 async function handleAddNote() {

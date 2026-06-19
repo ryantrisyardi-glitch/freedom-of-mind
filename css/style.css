@@ -451,6 +451,76 @@ button{ font-family: inherit; }
 }
 .modal__actions{ display:flex; justify-content:flex-end; gap:10px; margin-top: 6px; }
 
+/* ---------- Floating mini toolbar (fix #1) ---------- */
+.floating-toolbar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  background: var(--paper-card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+  display: flex;
+  gap: 2px;
+  padding: 5px 10px;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  transform: translateX(-50%) translateY(10px);
+}
+.floating-toolbar.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+.floating-toolbar button {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--ink);
+  line-height: 1;
+  transition: border-color 0.15s, background 0.15s;
+}
+.floating-toolbar button:hover { border-color: var(--terracotta-dim); }
+.floating-toolbar button.is-active { background: var(--terracotta-dim); border-color: var(--terracotta-dim); }
+.floating-toolbar button:disabled { opacity: 0.35; cursor: not-allowed; }
+.floating-toolbar__sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; flex-shrink: 0; }
+
+/* ---------- Drag & drop sorting (fix #2) ---------- */
+.sortable-drag-handle {
+  cursor: grab;
+  color: var(--sage);
+  font-size: 16px;
+  padding: 0 6px;
+  flex-shrink: 0;
+  opacity: 0.5;
+  user-select: none;
+  transition: opacity 0.15s;
+  line-height: 1;
+}
+.sortable-drag-handle:hover { opacity: 1; }
+.dragging { opacity: 0.4; }
+.drag-over { outline: 2px dashed var(--terracotta); outline-offset: 2px; border-radius: 10px; }
+
+/* chapter-card drag handle */
+.chapter-card .sortable-drag-handle {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: 14px;
+}
+.chapter-card { position: relative; }
+
+/* ---------- Clickable card/row (fix #3) ---------- */
+.chapter-card.is-clickable { cursor: pointer; }
+.note-row.is-clickable { cursor: pointer; }
+
 @media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important; } }
 
 @media (max-width: 600px){

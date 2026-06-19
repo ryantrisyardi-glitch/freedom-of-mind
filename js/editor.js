@@ -347,6 +347,75 @@ const TOOLBAR_HTML = `
   </div>
 `;
 
+// ---------- Floating mini toolbar ----------
+
+const FLOATING_TOOLBAR_HTML = `
+  <button data-fcmd="undo" title="Urungkan" disabled>↶</button>
+  <button data-fcmd="redo" title="Ulangi" disabled>↷</button>
+  <span class="floating-toolbar__sep"></span>
+  <button data-fcmd="bold" title="Tebal"><strong>B</strong></button>
+  <button data-fcmd="italic" title="Miring"><em>I</em></button>
+  <button data-fcmd="underline" title="Garis bawah"><u>U</u></button>
+  <button data-fcmd="highlight" title="Highlight">▨</button>
+`;
+
+let floatingToolbarEl = null;
+
+function createFloatingToolbar() {
+  const ft = document.createElement("div");
+  ft.className = "floating-toolbar";
+  ft.id = "floatingToolbar";
+  ft.innerHTML = FLOATING_TOOLBAR_HTML;
+  document.body.appendChild(ft);
+
+  ft.querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("mousedown", (e) => e.preventDefault());
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (btn.disabled) return;
+      const cmd = btn.dataset.fcmd;
+      switch (cmd) {
+        case "undo": undo(); break;
+        case "redo": redo(); break;
+        case "bold": exec("bold"); break;
+        case "italic": exec("italic"); break;
+        case "underline": exec("underline"); break;
+        case "highlight": toggleHighlight(); editorEl.focus(); updateToolbarState(); break;
+      }
+      updateFloatingToolbarState();
+    });
+  });
+
+  return ft;
+}
+
+function updateFloatingToolbarState() {
+  if (!floatingToolbarEl) return;
+  const map = {
+    bold: () => { try { return document.queryCommandState("bold"); } catch { return false; } },
+    italic: () => { try { return document.queryCommandState("italic"); } catch { return false; } },
+    underline: () => { try { return document.queryCommandState("underline"); } catch { return false; } },
+    highlight: () => isSelectionInsideTag("MARK"),
+  };
+  Object.entries(map).forEach(([cmd, check]) => {
+    const btn = floatingToolbarEl.querySelector(`[data-fcmd="${cmd}"]`);
+    if (btn) btn.classList.toggle("is-active", !!check());
+  });
+  const undoBtn = floatingToolbarEl.querySelector('[data-fcmd="undo"]');
+  const redoBtn = floatingToolbarEl.querySelector('[data-fcmd="redo"]');
+  if (undoBtn) undoBtn.disabled = historyIndex <= 0;
+  if (redoBtn) redoBtn.disabled = historyIndex >= history.length - 1;
+}
+
+function checkFloatingToolbarVisibility() {
+  if (!floatingToolbarEl) return;
+  const toolbar = document.getElementById("editorToolbar");
+  if (!toolbar) return;
+  const rect = toolbar.getBoundingClientRect();
+  floatingToolbarEl.classList.toggle("is-visible", rect.bottom < 0);
+  if (rect.bottom < 0) updateFloatingToolbarState();
+}
+
 /**
  * Inisialisasi editor pada elemen tertentu.
  */
@@ -441,6 +510,13 @@ export function initEditor(containerEl, initialHtml, onChange) {
   });
 
   updateUndoRedoButtons();
+
+  // Floating toolbar — muncul saat toolbar asli tergulir ke atas
+  floatingToolbarEl = createFloatingToolbar();
+  window.addEventListener("scroll", checkFloatingToolbarVisibility, { passive: true });
+  editorEl.addEventListener("keyup", updateFloatingToolbarState);
+  editorEl.addEventListener("mouseup", updateFloatingToolbarState);
+
   return editorEl;
 }
 
