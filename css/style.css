@@ -694,6 +694,26 @@ button{ font-family: inherit; }
 .note-content .sticky-note { pointer-events: none; }
 .note-content .sticky-note__controls { display: none; }
 
+/* Sticky note wrapper (non-editable outer, editable inner text) */
+.sticky-note-wrapper {
+  display: inline-block;
+  vertical-align: top;
+  margin: 8px 4px;
+}
+.sticky-note__text {
+  outline: none;
+  min-height: 48px;
+  cursor: text;
+  font-size: 0.9em;
+  line-height: 1.6;
+  color: inherit;
+}
+.sticky-note__text:empty::before {
+  content: "Catatan...";
+  color: rgba(0,0,0,0.35);
+  pointer-events: none;
+}
+
 /* ---------- Drag & drop sorting (fix #2) ---------- */
 .sortable-drag-handle {
   cursor: grab;
@@ -730,4 +750,80 @@ button{ font-family: inherit; }
   .editor-area{ padding: 20px 18px; }
   .note-row{ flex-direction: column; align-items: stretch; }
   .note-row__actions{ justify-content: flex-end; }
+}
+
+/* ========================================================
+   MOBILE — floating toolbar besar, di atas keyboard
+   ======================================================== */
+@media (max-width: 768px) {
+  /* Floating toolbar: full-width bar di atas keyboard */
+  .floating-toolbar {
+    bottom: 8px; /* JS akan override via style.bottom */
+    left: 0;
+    right: 0;
+    transform: none;
+    width: 100%;
+    max-width: 100%;
+    border-radius: 0;
+    transition: opacity 0.18s, bottom 0.15s;
+  }
+  .floating-toolbar.is-visible {
+    transform: none;
+  }
+  .floating-toolbar__body {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    padding: 8px 10px 10px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .floating-toolbar__row {
+    gap: 4px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .floating-toolbar__row::-webkit-scrollbar { display: none; }
+
+  /* Tombol lebih besar & mudah disentuh */
+  .floating-toolbar button[data-fcmd] {
+    padding: 8px 12px;
+    font-size: 15px;
+    min-width: 36px;
+    min-height: 36px;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+  .floating-toolbar__toggle {
+    width: 36px;
+    height: 22px;
+    font-size: 11px;
+  }
+  .floating-toolbar__sep {
+    height: 24px;
+    flex-shrink: 0;
+  }
+
+  /* Color palette — centered, bigger swatches on mobile */
+  .color-palette {
+    left: 50% !important;
+    transform: translateX(-50%) scale(0.94) translateY(6px);
+    transform-origin: bottom center;
+    min-width: 220px;
+  }
+  .color-palette.is-visible {
+    transform: translateX(-50%) scale(1) translateY(0);
+  }
+  .color-palette__swatch {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+  }
+  .color-palette__grid {
+    gap: 10px;
+  }
 }
