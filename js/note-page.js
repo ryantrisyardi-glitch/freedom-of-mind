@@ -128,7 +128,6 @@ function renderComments(list) {
     </div>
   `).join("");
 
-  // Pasang event listener hapus komentar (admin only)
   el.querySelectorAll(".comment__delete-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
       const ok = await showConfirm("Hapus komentar ini? Komentar akan dipindahkan ke Trash.");

@@ -616,32 +616,45 @@ button{ font-family: inherit; }
 .btn-highlight::after {
   content: "";
   position: absolute;
-  bottom: 1px;
-  left: 4px;
-  right: 4px;
+  bottom: 2px; left: 5px; right: 5px;
   height: 3px;
   border-radius: 2px;
   background: var(--hl-color, #FFF176);
-  transition: background 0.2s;
+  transition: background 0.18s;
+}
+
+/* Text color button — coloured underline on "A" */
+.btn-textcolor {
+  position: relative;
+  font-weight: 700;
+}
+.btn-textcolor::after {
+  content: "";
+  position: absolute;
+  bottom: 2px; left: 5px; right: 5px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--tc-color, #1A1A1A);
+  transition: background 0.18s;
 }
 
 /* ========================================================
-   COLOR PALETTE POPUP
+   COLOR PALETTE POPUP — highlight + text color
    ======================================================== */
 .color-palette {
   position: fixed;
   z-index: 400;
   background: var(--paper-card);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 16px;
   box-shadow: 0 12px 36px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08);
-  padding: 12px 14px;
-  min-width: 180px;
+  padding: 14px 16px;
+  width: 232px;
   opacity: 0;
   pointer-events: none;
   transform: scale(0.94) translateY(6px);
   transform-origin: bottom center;
-  transition: opacity 0.18s, transform 0.18s;
+  transition: opacity 0.16s, transform 0.16s;
 }
 .color-palette.is-visible {
   opacity: 1;
@@ -649,29 +662,69 @@ button{ font-family: inherit; }
   transform: scale(1) translateY(0);
 }
 .color-palette__label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   color: var(--ink-muted);
   text-transform: uppercase;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+}
+.color-palette__divider {
+  height: 1px;
+  background: var(--line);
+  margin: 12px 0;
 }
 .color-palette__grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  gap: 6px;
+}
+.color-palette__grid--hl {
+  grid-template-columns: repeat(5, 1fr);
+}
+.color-palette__grid--txt {
+  grid-template-columns: repeat(8, 1fr);
 }
 .color-palette__swatch {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 2px solid transparent;
   cursor: pointer;
-  transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+  transition: transform 0.1s, border-color 0.1s, box-shadow 0.1s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.14);
 }
-.color-palette__swatch:hover { transform: scale(1.14); box-shadow: 0 4px 12px rgba(0,0,0,0.18); }
+.color-palette__grid--hl .color-palette__swatch {
+  width: 30px; height: 30px; border-radius: 8px;
+}
+.color-palette__grid--txt .color-palette__swatch {
+  width: 20px; height: 20px; border-radius: 5px;
+}
+.color-palette__swatch:hover { transform: scale(1.2); box-shadow: 0 3px 10px rgba(0,0,0,0.22); }
 .color-palette__swatch.is-active { border-color: var(--ink); transform: scale(1.1); }
+/* Remove-highlight swatch */
+.color-palette__swatch--none {
+  background: #fff !important;
+  color: #aaa;
+  font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px dashed #ccc !important;
+  box-shadow: none !important;
+}
+.color-palette__swatch--none:hover { color: #555; border-color: #888 !important; }
+
+@media (max-width: 768px) {
+  .color-palette {
+    width: 200px;
+    left: 50% !important;
+    transform: translateX(-50%) scale(0.94) translateY(6px);
+    transform-origin: bottom center;
+  }
+  .color-palette.is-visible {
+    transform: translateX(-50%) scale(1) translateY(0);
+  }
+  .color-palette__grid--hl .color-palette__swatch { width: 26px; height: 26px; }
+  .color-palette__grid--txt .color-palette__swatch { width: 18px; height: 18px; }
+}
+
+
 
 
 /* ========================================================
@@ -895,23 +948,5 @@ button{ font-family: inherit; }
     height: 24px;
     flex-shrink: 0;
   }
-
-  /* Color palette — centered, bigger swatches on mobile */
-  .color-palette {
-    left: 50% !important;
-    transform: translateX(-50%) scale(0.94) translateY(6px);
-    transform-origin: bottom center;
-    min-width: 220px;
-  }
-  .color-palette.is-visible {
-    transform: translateX(-50%) scale(1) translateY(0);
-  }
-  .color-palette__swatch {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-  }
-  .color-palette__grid {
-    gap: 10px;
-  }
 }
+

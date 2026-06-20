@@ -117,22 +117,30 @@ const HIGHLIGHT_COLORS = [
   { name: "Ungu",     value: "#E1BEE7" },
   { name: "Oranye",   value: "#FFE0B2" },
   { name: "Pink",     value: "#F8BBD9" },
-  { name: "Abu",      value: "#F5F5F5" },
+  { name: "Abu",      value: "#EEEEEE" },
 ];
 
-let activeHighlightColor = HIGHLIGHT_COLORS[0].value; // default kuning
+const TEXT_COLORS = [
+  { name: "Hitam",      value: "#1A1A1A" },
+  { name: "Abu Tua",    value: "#555555" },
+  { name: "Abu",        value: "#888888" },
+  { name: "Terracotta", value: "#C0583A" },
+  { name: "Merah",      value: "#E53935" },
+  { name: "Oranye",     value: "#E65100" },
+  { name: "Kuning",     value: "#F9A825" },
+  { name: "Hijau Tua",  value: "#2E7D32" },
+  { name: "Hijau",      value: "#388E3C" },
+  { name: "Sage",       value: "#7A8B7F" },
+  { name: "Biru Tua",   value: "#1565C0" },
+  { name: "Biru",       value: "#1976D2" },
+  { name: "Ungu",       value: "#6A1B9A" },
+  { name: "Pink",       value: "#C2185B" },
+  { name: "Coklat",     value: "#6D4C41" },
+  { name: "Putih",      value: "#FFFFFF" },
+];
 
-function getMarkColorAtSelection() {
-  const sel = window.getSelection();
-  if (!sel.rangeCount) return null;
-  let node = sel.getRangeAt(0).commonAncestorContainer;
-  node = node.nodeType === 3 ? node.parentElement : node;
-  while (node && node !== editorEl) {
-    if (node.tagName === "MARK") return node.style.background || node.dataset.color || null;
-    node = node.parentElement;
-  }
-  return null;
-}
+let activeHighlightColor = HIGHLIGHT_COLORS[0].value;
+let activeTextColor = TEXT_COLORS[0].value;
 
 function removeMarkAtSelection() {
   const sel = window.getSelection();
@@ -158,11 +166,7 @@ function toggleHighlight(color) {
   const useColor = color || activeHighlightColor;
   const sel = window.getSelection();
   if (!sel.rangeCount || sel.isCollapsed) return;
-
-  // Jika sudah di dalam mark, lepas
   if (removeMarkAtSelection()) return;
-
-  // Bungkus dengan mark berwarna
   const range = sel.getRangeAt(0);
   const mark = document.createElement("mark");
   mark.style.background = useColor;
@@ -174,64 +178,149 @@ function toggleHighlight(color) {
   triggerChange();
 }
 
-// ---------- Color palette popup ----------
+function applyTextColor(color) {
+  const useColor = color || activeTextColor;
+  const sel = window.getSelection();
+  if (!sel.rangeCount || sel.isCollapsed) return;
+  editorEl.focus();
+  document.execCommand("foreColor", false, useColor);
+  scheduleHistoryPush();
+  triggerChange();
+  updateToolbarState();
+  updateFloatingToolbarState();
+}
+
+// ---------- Unified Color Palette Popup ----------
 
 let colorPaletteEl = null;
-let highlightHoldTimer = null;
+// Saved selection before palette opens (palette clicks lose focus)
+let savedRange = null;
+
+function saveSelection() {
+  const sel = window.getSelection();
+  if (sel.rangeCount) savedRange = sel.getRangeAt(0).cloneRange();
+}
+
+function restoreSelection() {
+  if (!savedRange) return;
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(savedRange);
+}
 
 function createColorPalette() {
   const palette = document.createElement("div");
   palette.className = "color-palette";
   palette.id = "colorPalette";
   palette.innerHTML = `
-    <div class="color-palette__label">Warna highlight</div>
-    <div class="color-palette__grid">
-      ${HIGHLIGHT_COLORS.map(c => `
-        <button class="color-palette__swatch" style="background:${c.value}" data-color="${c.value}" title="${c.name}"></button>
-      `).join("")}
+    <div class="color-palette__section">
+      <div class="color-palette__label">Warna highlight</div>
+      <div class="color-palette__grid color-palette__grid--hl">
+        ${HIGHLIGHT_COLORS.map(c => `
+          <button class="color-palette__swatch color-palette__swatch--hl${c.value === activeHighlightColor ? " is-active" : ""}"
+            data-hl="${c.value}" title="${c.name}" style="background:${c.value}"></button>
+        `).join("")}
+        <button class="color-palette__swatch color-palette__swatch--none" data-hl="none" title="Hapus highlight">✕</button>
+      </div>
+    </div>
+    <div class="color-palette__divider"></div>
+    <div class="color-palette__section">
+      <div class="color-palette__label">Warna teks</div>
+      <div class="color-palette__grid color-palette__grid--txt">
+        ${TEXT_COLORS.map(c => `
+          <button class="color-palette__swatch color-palette__swatch--txt${c.value === activeTextColor ? " is-active" : ""}"
+            data-txt="${c.value}" title="${c.name}" style="background:${c.value};${c.value === "#FFFFFF" ? "border:1.5px solid #ccc;" : ""}"></button>
+        `).join("")}
+      </div>
     </div>
   `;
   document.body.appendChild(palette);
 
-  palette.querySelectorAll(".color-palette__swatch").forEach(btn => {
+  // Highlight swatches
+  palette.querySelectorAll("[data-hl]").forEach(btn => {
     btn.addEventListener("mousedown", e => e.preventDefault());
     btn.addEventListener("click", e => {
       e.stopPropagation();
-      const color = btn.dataset.color;
-      activeHighlightColor = color;
-      // Update semua tombol highlight
-      document.querySelectorAll('[data-cmd="highlight"], [data-fcmd="highlight"]').forEach(b => {
-        b.style.setProperty("--hl-color", color);
-      });
-      palette.querySelectorAll(".color-palette__swatch").forEach(s => s.classList.remove("is-active"));
-      btn.classList.add("is-active");
-      toggleHighlight(color);
+      restoreSelection();
+      const val = btn.dataset.hl;
+      if (val === "none") {
+        removeMarkAtSelection();
+      } else {
+        activeHighlightColor = val;
+        toggleHighlight(val);
+        syncHighlightUI();
+      }
       hideColorPalette();
     });
   });
 
-  // Tandai default aktif
-  palette.querySelector(`[data-color="${activeHighlightColor}"]`)?.classList.add("is-active");
-
-  document.addEventListener("click", e => {
-    if (!palette.contains(e.target) && !e.target.closest('[data-cmd="highlight"]') && !e.target.closest('[data-fcmd="highlight"]')) {
+  // Text color swatches
+  palette.querySelectorAll("[data-txt]").forEach(btn => {
+    btn.addEventListener("mousedown", e => e.preventDefault());
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      restoreSelection();
+      activeTextColor = btn.dataset.txt;
+      applyTextColor(activeTextColor);
+      syncTextColorUI();
       hideColorPalette();
-    }
+    });
+  });
+
+  // Close on outside click
+  document.addEventListener("mousedown", e => {
+    if (!palette.contains(e.target)) hideColorPalette();
   });
 
   return palette;
 }
 
-function showColorPalette(anchorBtn) {
+function syncHighlightUI() {
+  // Update underline color on all highlight buttons
+  document.querySelectorAll('[data-cmd="highlight"], [data-fcmd="highlight"]').forEach(b => {
+    b.style.setProperty("--hl-color", activeHighlightColor);
+  });
+  // Update active swatch
+  colorPaletteEl?.querySelectorAll("[data-hl]").forEach(s => {
+    s.classList.toggle("is-active", s.dataset.hl === activeHighlightColor);
+  });
+}
+
+function syncTextColorUI() {
+  // Update underline color on all text-color buttons
+  document.querySelectorAll('[data-cmd="textcolor"], [data-fcmd="textcolor"]').forEach(b => {
+    b.style.setProperty("--tc-color", activeTextColor);
+  });
+  // Update active swatch
+  colorPaletteEl?.querySelectorAll("[data-txt]").forEach(s => {
+    s.classList.toggle("is-active", s.dataset.txt === activeTextColor);
+  });
+}
+
+function showColorPalette(x, y) {
   if (!colorPaletteEl) colorPaletteEl = createColorPalette();
-  const rect = anchorBtn.getBoundingClientRect();
-  colorPaletteEl.style.left = Math.max(8, rect.left - 8) + "px";
-  colorPaletteEl.style.top = (rect.top - colorPaletteEl.offsetHeight - 10 + window.scrollY) + "px";
   colorPaletteEl.classList.add("is-visible");
-  // Hitung ulang posisi setelah visible (untuk dapatkan offsetHeight)
+
+  // Position — flip if near edges
   requestAnimationFrame(() => {
-    const h = colorPaletteEl.offsetHeight;
-    colorPaletteEl.style.top = (rect.top - h - 8 + window.scrollY) + "px";
+    const pw = colorPaletteEl.offsetWidth;
+    const ph = colorPaletteEl.offsetHeight;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let left = x;
+    let top = y - ph - 10;
+
+    // flip right if overflows right
+    if (left + pw > vw - 8) left = vw - pw - 8;
+    if (left < 8) left = 8;
+    // flip below if overflows top
+    if (top < 8) top = y + 14;
+    // clip bottom
+    if (top + ph > vh - 8) top = vh - ph - 8;
+
+    colorPaletteEl.style.left = left + "px";
+    colorPaletteEl.style.top = top + window.scrollY + "px";
   });
 }
 
@@ -239,33 +328,84 @@ function hideColorPalette() {
   colorPaletteEl?.classList.remove("is-visible");
 }
 
-function setupHighlightButton(btn, isFcmd) {
-  const cmdKey = isFcmd ? "fcmd" : "cmd";
+function setupHighlightButton(btn) {
   btn.style.setProperty("--hl-color", activeHighlightColor);
 
-  // Klik biasa = highlight dengan warna aktif
-  btn.addEventListener("mousedown", e => e.preventDefault());
+  // Click = apply current color
+  btn.addEventListener("mousedown", e => {
+    e.preventDefault();
+    saveSelection();
+  });
   btn.addEventListener("click", e => {
     e.preventDefault();
+    restoreSelection();
     toggleHighlight(activeHighlightColor);
     editorEl.focus();
     updateToolbarState();
+    updateFloatingToolbarState();
     hideColorPalette();
   });
 
-  // Tahan lama = buka color palette
-  btn.addEventListener("pointerdown", e => {
-    highlightHoldTimer = setTimeout(() => {
-      showColorPalette(btn);
-    }, 500);
-  });
-  btn.addEventListener("pointerup", () => clearTimeout(highlightHoldTimer));
-  btn.addEventListener("pointerleave", () => clearTimeout(highlightHoldTimer));
-
-  // Klik kanan = langsung buka palette
+  // Right-click or long-press = open palette
   btn.addEventListener("contextmenu", e => {
     e.preventDefault();
-    showColorPalette(btn);
+    saveSelection();
+    const r = btn.getBoundingClientRect();
+    showColorPalette(r.left, r.top);
+  });
+
+  let holdTimer;
+  btn.addEventListener("pointerdown", () => {
+    holdTimer = setTimeout(() => {
+      saveSelection();
+      const r = btn.getBoundingClientRect();
+      showColorPalette(r.left, r.top);
+    }, 500);
+  });
+  btn.addEventListener("pointerup", () => clearTimeout(holdTimer));
+  btn.addEventListener("pointerleave", () => clearTimeout(holdTimer));
+}
+
+function setupTextColorButton(btn) {
+  btn.style.setProperty("--tc-color", activeTextColor);
+
+  btn.addEventListener("mousedown", e => {
+    e.preventDefault();
+    saveSelection();
+  });
+  btn.addEventListener("click", e => {
+    e.preventDefault();
+    restoreSelection();
+    applyTextColor(activeTextColor);
+    editorEl.focus();
+    hideColorPalette();
+  });
+
+  btn.addEventListener("contextmenu", e => {
+    e.preventDefault();
+    saveSelection();
+    const r = btn.getBoundingClientRect();
+    showColorPalette(r.left, r.top);
+  });
+
+  let holdTimer;
+  btn.addEventListener("pointerdown", () => {
+    holdTimer = setTimeout(() => {
+      saveSelection();
+      const r = btn.getBoundingClientRect();
+      showColorPalette(r.left, r.top);
+    }, 500);
+  });
+  btn.addEventListener("pointerup", () => clearTimeout(holdTimer));
+  btn.addEventListener("pointerleave", () => clearTimeout(holdTimer));
+}
+
+// Right-click inside editor area → open palette at cursor
+function setupEditorContextMenu() {
+  editorEl.addEventListener("contextmenu", e => {
+    e.preventDefault();
+    saveSelection();
+    showColorPalette(e.clientX, e.clientY);
   });
 }
 
@@ -591,7 +731,8 @@ const TOOLBAR_HTML = `
     <button data-cmd="bold" title="Tebal (Ctrl+B)"><strong>B</strong></button>
     <button data-cmd="italic" title="Miring (Ctrl+I)"><em>I</em></button>
     <button data-cmd="underline" title="Garis bawah"><u>U</u></button>
-    <button data-cmd="highlight" class="btn-highlight" title="Highlight (tahan untuk pilih warna)" style="--hl-color:#FFF176">▨</button>
+    <button data-cmd="highlight" class="btn-highlight" title="Highlight — klik kanan untuk pilih warna" style="--hl-color:#FFF176">▨</button>
+    <button data-cmd="textcolor" class="btn-textcolor" title="Warna teks — klik kanan untuk pilih warna" style="--tc-color:#1A1A1A">A</button>
     <button data-cmd="sticky" title="Sticky Note">📌</button>
   </div>
   <div class="toolbar-group">
@@ -636,7 +777,8 @@ const FLOATING_BODY_HTML = `
       <button data-fcmd="bold" title="Tebal"><strong>B</strong></button>
       <button data-fcmd="italic" title="Miring"><em>I</em></button>
       <button data-fcmd="underline" title="Garis bawah"><u>U</u></button>
-      <button data-fcmd="highlight" class="btn-highlight" title="Highlight (tahan untuk pilih warna)" style="--hl-color:#FFF176">▨</button>
+      <button data-fcmd="highlight" class="btn-highlight" title="Highlight — klik kanan untuk pilih warna" style="--hl-color:#FFF176">▨</button>
+      <button data-fcmd="textcolor" class="btn-textcolor" title="Warna teks — klik kanan untuk pilih warna" style="--tc-color:#1A1A1A">A</button>
       <button data-fcmd="sticky" title="Sticky Note">📌</button>
       <span class="floating-toolbar__sep"></span>
       <button data-fcmd="align-left" title="Rata kiri">⬸</button>
@@ -677,15 +819,14 @@ function createFloatingToolbar() {
     toggleBtn.title = floatingCollapsed ? "Tampilkan toolbar" : "Sembunyikan toolbar";
   });
 
-  // Highlight buttons – special setup
-  ft.querySelectorAll('[data-fcmd="highlight"]').forEach(btn => {
-    setupHighlightButton(btn, true);
-  });
+  // Highlight & textcolor buttons – special setup
+  ft.querySelectorAll('[data-fcmd="highlight"]').forEach(btn => setupHighlightButton(btn));
+  ft.querySelectorAll('[data-fcmd="textcolor"]').forEach(btn => setupTextColorButton(btn));
 
   // Other buttons
   ft.querySelectorAll("button[data-fcmd]").forEach((btn) => {
     const cmd = btn.dataset.fcmd;
-    if (cmd === "highlight") return; // sudah di-setup di atas
+    if (cmd === "highlight" || cmd === "textcolor") return;
     btn.addEventListener("mousedown", (e) => e.preventDefault());
     btn.addEventListener("click", (e) => {
       e.preventDefault();
@@ -705,6 +846,8 @@ function dispatchCmd(cmd) {
     case "bold": exec("bold"); break;
     case "italic": exec("italic"); break;
     case "underline": exec("underline"); break;
+    case "highlight": toggleHighlight(activeHighlightColor); editorEl.focus(); updateToolbarState(); updateFloatingToolbarState(); break;
+    case "textcolor": applyTextColor(activeTextColor); break;
     case "sticky": insertStickyNote(); break;
     case "align-left": setAlignment("left"); break;
     case "align-center": setAlignment("center"); break;
@@ -792,11 +935,14 @@ export function initEditor(containerEl, initialHtml, onChange) {
 
   // Setup tombol toolbar utama
   const highlightBtn = containerEl.querySelector('[data-cmd="highlight"]');
-  if (highlightBtn) setupHighlightButton(highlightBtn, false);
+  if (highlightBtn) setupHighlightButton(highlightBtn);
+
+  const textColorBtn = containerEl.querySelector('[data-cmd="textcolor"]');
+  if (textColorBtn) setupTextColorButton(textColorBtn);
 
   containerEl.querySelectorAll(".editor-toolbar button[data-cmd]").forEach((btn) => {
     const cmd = btn.dataset.cmd;
-    if (cmd === "highlight") return; // sudah di-setup
+    if (cmd === "highlight" || cmd === "textcolor") return;
     btn.addEventListener("mousedown", (e) => e.preventDefault());
     btn.addEventListener("click", (e) => {
       e.preventDefault();
@@ -804,6 +950,9 @@ export function initEditor(containerEl, initialHtml, onChange) {
       dispatchCmd(cmd);
     });
   });
+
+  // Klik kanan di area editor → buka color palette di posisi kursor
+  setupEditorContextMenu();
 
   editorEl.addEventListener("input", () => {
     normalizeEmptyState();
