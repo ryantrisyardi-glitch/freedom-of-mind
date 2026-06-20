@@ -192,12 +192,17 @@ export async function addComment({ noteId, uid, name, photoURL, text }) {
     photoURL: photoURL || "",
     text,
     createdAt: serverTimestamp(),
+    deletedAt: null,
   });
+}
+
+export async function deleteComment(commentId) {
+  return updateDoc(doc(db, "comments", commentId), { deletedAt: serverTimestamp() });
 }
 
 export function listenComments(noteId, onChange, onError) {
   const q = query(collection(db, "comments"), where("noteId", "==", noteId), orderBy("createdAt", "asc"));
-  return onSnapshot(q, (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), onError);
+  return onSnapshot(q, (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(c => !c.deletedAt)), onError);
 }
 
 // ---------- Admins ----------

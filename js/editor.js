@@ -269,43 +269,64 @@ function setupHighlightButton(btn, isFcmd) {
   });
 }
 
+// ---------- Paragraph Alignment ----------
+
+function setAlignment(align) {
+  editorEl.focus();
+  const cmds = { left: "justifyLeft", center: "justifyCenter", right: "justifyRight", justify: "justifyFull" };
+  document.execCommand(cmds[align] || "justifyLeft", false, null);
+  scheduleHistoryPush(); triggerChange(); updateToolbarState(); updateFloatingToolbarState();
+}
+
+function getCurrentAlignment() {
+  try {
+    if (document.queryCommandState("justifyCenter")) return "center";
+    if (document.queryCommandState("justifyRight")) return "right";
+    if (document.queryCommandState("justifyFull")) return "justify";
+  } catch {}
+  return "left";
+}
+
 // ---------- Sticky Note ----------
 
 const STICKY_COLORS = [
-  "#FFF9C4", // kuning lembut
-  "#C8E6C9", // hijau lembut
-  "#B3E5FC", // biru lembut
-  "#FFCDD2", // merah muda
-  "#E1BEE7", // ungu lembut
+  "#FFF9C4", "#C8E6C9", "#B3E5FC", "#FFCDD2", "#E1BEE7",
 ];
 
 let stickyCounter = 0;
 
-function insertStickyNote() {
+function insertStickyNote(position = "left") {
   const color = STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
   const id = "sticky-" + (++stickyCounter);
 
-  // Seluruh struktur pakai data-attribute, event ditangani via delegation di editorEl
   const colorDotsHtml = STICKY_COLORS.map(c =>
     `<button type="button" class="sticky-note__color-dot${c === color ? " is-active" : ""}"
       data-sticky-action="color" data-sticky-id="${id}" data-color="${c}"
       style="background:${c}" title="Ganti warna"></button>`
   ).join("");
 
-  const html = `
-    <div class="sticky-note-wrapper" data-sticky-id="${id}" contenteditable="false">
-      <div class="sticky-note" style="background:${color}" data-sticky-id="${id}">
-        <div class="sticky-note__controls">
-          ${colorDotsHtml}
+  const posButtons = ["left", "right", "none"].map(p =>
+    `<button type="button" class="sticky-note__pos-btn${p === position ? " is-active" : ""}"
+      data-sticky-action="pos" data-sticky-id="${id}" data-pos="${p}"
+      title="${p === "none" ? "Inline (tidak float)" : "Float " + p}">
+      ${{ left: "⇤", right: "⇥", none: "⇔" }[p]}
+    </button>`
+  ).join("");
+
+  const html = `<div class="sticky-note-wrapper sticky-pos-${position}" data-sticky-id="${id}" contenteditable="false">
+    <div class="sticky-note" style="background:${color}" data-sticky-id="${id}">
+      <div class="sticky-note__controls">
+        <div class="sticky-note__controls-left">${colorDotsHtml}</div>
+        <div class="sticky-note__controls-right">
+          ${posButtons}
           <button type="button" class="sticky-note__remove"
             data-sticky-action="remove" data-sticky-id="${id}" title="Hapus">✕</button>
         </div>
-        <div class="sticky-note__text" contenteditable="true" data-sticky-id="${id}">Catatan...</div>
       </div>
+      <div class="sticky-note__text" contenteditable="true" data-sticky-id="${id}">Catatan...</div>
     </div>
-  `;
+  </div>`;
 
-  // Insert sebagai node
   const temp = document.createElement("div");
   temp.innerHTML = html;
   const wrapper = temp.firstElementChild;
@@ -319,9 +340,7 @@ function insertStickyNote() {
   triggerChange();
 }
 
-// Dipanggil sekali saat initEditor — delegasi semua event sticky note ke editorEl
 function setupStickyDelegation() {
-  // Gunakan mousedown+pointerup agar tidak kehilangan event di mobile contenteditable
   editorEl.addEventListener("mousedown", handleStickyInteraction);
   editorEl.addEventListener("touchend", handleStickyInteraction);
 }
@@ -345,9 +364,17 @@ function handleStickyInteraction(e) {
   } else if (action === "color") {
     const color = btn.dataset.color;
     if (sticky) sticky.style.background = color;
-    // Update active dot
     editorEl.querySelectorAll(`[data-sticky-action="color"][data-sticky-id="${id}"]`)
       .forEach(d => d.classList.toggle("is-active", d.dataset.color === color));
+    scheduleHistoryPush();
+    triggerChange();
+  } else if (action === "pos") {
+    const pos = btn.dataset.pos;
+    if (wrapper) {
+      wrapper.className = `sticky-note-wrapper sticky-pos-${pos}`;
+    }
+    editorEl.querySelectorAll(`[data-sticky-action="pos"][data-sticky-id="${id}"]`)
+      .forEach(d => d.classList.toggle("is-active", d.dataset.pos === pos));
     scheduleHistoryPush();
     triggerChange();
   }
@@ -536,10 +563,14 @@ function isSelectionInsideTag(tagName) {
 
 function updateToolbarState() {
   const map = {
-    bold:      () => { try { return document.queryCommandState("bold"); } catch { return false; } },
-    italic:    () => { try { return document.queryCommandState("italic"); } catch { return false; } },
-    underline: () => { try { return document.queryCommandState("underline"); } catch { return false; } },
-    highlight: () => isSelectionInsideTag("MARK"),
+    bold:           () => { try { return document.queryCommandState("bold"); } catch { return false; } },
+    italic:         () => { try { return document.queryCommandState("italic"); } catch { return false; } },
+    underline:      () => { try { return document.queryCommandState("underline"); } catch { return false; } },
+    highlight:      () => isSelectionInsideTag("MARK"),
+    "align-left":   () => { try { return document.queryCommandState("justifyLeft"); } catch { return false; } },
+    "align-center": () => { try { return document.queryCommandState("justifyCenter"); } catch { return false; } },
+    "align-right":  () => { try { return document.queryCommandState("justifyRight"); } catch { return false; } },
+    "align-justify":() => { try { return document.queryCommandState("justifyFull"); } catch { return false; } },
   };
   ["cmd", "fcmd"].forEach(k => {
     Object.entries(map).forEach(([cmd, check]) => {
@@ -567,6 +598,12 @@ const TOOLBAR_HTML = `
     <button data-cmd="h2" title="Judul bagian">H2</button>
     <button data-cmd="h3" title="Sub-judul">H3</button>
     <button data-cmd="p" title="Paragraf normal">¶</button>
+  </div>
+  <div class="toolbar-group">
+    <button data-cmd="align-left" title="Rata kiri">⬸</button>
+    <button data-cmd="align-center" title="Rata tengah">⬷</button>
+    <button data-cmd="align-right" title="Rata kanan">⬶</button>
+    <button data-cmd="align-justify" title="Rata kanan-kiri">⬳</button>
   </div>
   <div class="toolbar-group">
     <button data-cmd="quote-line" title="Kutipan biasa">" biasa</button>
@@ -601,6 +638,11 @@ const FLOATING_BODY_HTML = `
       <button data-fcmd="underline" title="Garis bawah"><u>U</u></button>
       <button data-fcmd="highlight" class="btn-highlight" title="Highlight (tahan untuk pilih warna)" style="--hl-color:#FFF176">▨</button>
       <button data-fcmd="sticky" title="Sticky Note">📌</button>
+      <span class="floating-toolbar__sep"></span>
+      <button data-fcmd="align-left" title="Rata kiri">⬸</button>
+      <button data-fcmd="align-center" title="Rata tengah">⬷</button>
+      <button data-fcmd="align-right" title="Rata kanan">⬶</button>
+      <button data-fcmd="align-justify" title="Justify">⬳</button>
       <span class="floating-toolbar__sep"></span>
       <button data-fcmd="h2" title="Judul">H2</button>
       <button data-fcmd="h3" title="Sub-judul">H3</button>
@@ -664,6 +706,10 @@ function dispatchCmd(cmd) {
     case "italic": exec("italic"); break;
     case "underline": exec("underline"); break;
     case "sticky": insertStickyNote(); break;
+    case "align-left": setAlignment("left"); break;
+    case "align-center": setAlignment("center"); break;
+    case "align-right": setAlignment("right"); break;
+    case "align-justify": setAlignment("justify"); break;
     case "h2": insertHeading(2); break;
     case "h3": insertHeading(3); break;
     case "p": insertParagraph(); break;
