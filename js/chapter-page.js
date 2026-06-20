@@ -3,7 +3,7 @@
 // =========================================================
 
 import { initApp, onAuthReady, currentIsAdmin, showModal, showConfirm } from "./ui-shared.js";
-import { getChapter, getNotesByChapter, createNote, deleteNote, updateNote } from "./data.js";
+import { getChapter, getNotesByChapter, createNote, deleteNote, updateNote, uploadToCloudinary } from "./data.js";
 
 function getChapterId() {
   return new URLSearchParams(location.search).get("id");
@@ -68,6 +68,15 @@ function render() {
           <div class="note-row__tags">${(n.tag || []).map((t) => `<span>#${escapeHtml(t)}</span>`).join("")}</div>
         </div>
       </div>
+      <div class="note-row__thumbnail ${n.coverImage ? "has-image" : ""}">
+        ${n.coverImage
+          ? `<img src="${n.coverImage}" alt="" class="note-row__cover-img">`
+          : `<div class="note-row__cover-empty"></div>`}
+        ${currentIsAdmin ? `
+          <button class="note-row__cover-btn" data-cover="${n.id}" title="${n.coverImage ? "Ganti gambar" : "Tambah gambar"}">
+            ${n.coverImage ? "✎" : "＋"}
+          </button>` : ""}
+      </div>
       ${currentIsAdmin ? `
         <div class="note-row__actions">
           <a class="btn btn-icon" href="editor.html?id=${n.id}" title="Edit">✎</a>
@@ -85,6 +94,15 @@ function render() {
   list.querySelectorAll(".btn-icon[href]").forEach((a) =>
     a.addEventListener("click", (e) => e.stopPropagation())
   );
+
+  // Cover image upload handler (admin only)
+  list.querySelectorAll("[data-cover]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const noteId = btn.dataset.cover;
+      handleCoverUpload(noteId, btn);
+    });
+  });
 
   // Klik pada row untuk navigasi (fix #3)
   list.querySelectorAll(".note-row.is-clickable").forEach((row) => {
@@ -169,6 +187,51 @@ async function handleDeleteNote(noteId) {
   await deleteNote(noteId);
   notes = notes.filter((n) => n.id !== noteId);
   render();
+}
+
+async function handleCoverUpload(noteId, btn) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.addEventListener("change", async () => {
+    const file = input.files[0];
+    if (!file) return;
+
+    const thumbnail = btn.closest(".note-row__thumbnail");
+    btn.disabled = true;
+    btn.textContent = "…";
+
+    try {
+      const url = await uploadToCloudinary(file);
+      await updateNote(noteId, { coverImage: url });
+
+      // Update local notes array
+      const note = notes.find(n => n.id === noteId);
+      if (note) note.coverImage = url;
+
+      // Update DOM in place without full re-render
+      const img = thumbnail.querySelector(".note-row__cover-img");
+      const empty = thumbnail.querySelector(".note-row__cover-empty");
+      if (img) {
+        img.src = url;
+      } else {
+        const newImg = document.createElement("img");
+        newImg.src = url;
+        newImg.alt = "";
+        newImg.className = "note-row__cover-img";
+        empty?.replaceWith(newImg);
+      }
+      thumbnail.classList.add("has-image");
+      btn.textContent = "✎";
+      btn.title = "Ganti gambar";
+    } catch (err) {
+      alert("Gagal mengupload gambar: " + err.message);
+      btn.textContent = "＋";
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  input.click();
 }
 
 (async () => {

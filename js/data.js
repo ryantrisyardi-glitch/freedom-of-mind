@@ -182,6 +182,25 @@ export async function moveNoteToChapter(noteId, newChapterId) {
   return updateDoc(doc(db, "notes", noteId), { chapterId: newChapterId, updatedAt: serverTimestamp() });
 }
 
+// ---------- Cloudinary Upload ----------
+
+export async function uploadToCloudinary(file) {
+  const cfg = window.CLOUDINARY_CONFIG;
+  if (!cfg || cfg.cloudName === "GANTI_CLOUD_NAME") {
+    throw new Error("Cloudinary belum dikonfigurasi. Lihat README.md.");
+  }
+  if (file.size > 8 * 1024 * 1024) throw new Error("Ukuran gambar maksimal 8 MB.");
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("upload_preset", cfg.uploadPreset);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cfg.cloudName}/image/upload`, {
+    method: "POST", body: fd,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || "Upload gagal");
+  return data.secure_url;
+}
+
 // ---------- Comments ----------
 
 export async function addComment({ noteId, uid, name, photoURL, text }) {
