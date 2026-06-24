@@ -505,6 +505,47 @@ button{ font-family: inherit; }
   border: 1px solid var(--terracotta-dim); border-radius:999px; padding: 2px 9px;
 }
 
+/* ---------- Draft / Publish badges ---------- */
+.badge-draft{
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--sage);
+  border: 1px solid var(--line); border-radius:999px; padding: 2px 9px;
+  background: var(--paper-dim);
+}
+.badge-published{
+  font-family: var(--font-mono); font-size: 10.5px; color: #5c8a5c;
+  border: 1px solid #b8d8b8; border-radius:999px; padding: 2px 9px;
+  background: #f2f9f2;
+}
+
+/* ---------- Draft preview banner (note page) ---------- */
+.draft-banner{
+  background: #fdf6e3; border: 1px solid #e8d8a0; border-radius: 10px;
+  padding: 14px 18px; margin-bottom: 24px; display:flex; align-items:center;
+  gap: 10px; font-size: 0.88rem; color: #7a6a30; font-family: var(--font-mono);
+}
+.draft-banner__icon{ font-size: 1.1rem; }
+.draft-banner__text{ flex:1; }
+.draft-banner__actions{ display:flex; gap:8px; flex-shrink:0; }
+
+/* ---------- Publish toolbar in editor ---------- */
+.publish-bar{
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 18px; background: var(--paper-dim);
+  border: 1px solid var(--line); border-radius: 10px;
+  margin-bottom: 14px;
+}
+.publish-bar__status{ font-family: var(--font-mono); font-size: 12px; flex:1; }
+.publish-bar__status--draft{ color: var(--sage); }
+.publish-bar__status--published{ color: #5c8a5c; }
+.btn-publish{
+  background: #5c8a5c; border-color: #5c8a5c; color: #fff; font-weight:600;
+}
+.btn-publish:hover{ background: #4a7040; border-color: #4a7040; }
+.btn-unpublish{
+  background: transparent; border-color: var(--sage); color: var(--sage);
+}
+.btn-unpublish:hover{ background: rgba(100,115,100,0.08); }
+
 .modal-overlay{
   position: fixed; inset:0; background: rgba(43,39,36,0.4);
   display:flex; align-items:center; justify-content:center; z-index: 100; padding: 20px;

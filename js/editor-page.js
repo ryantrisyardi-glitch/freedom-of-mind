@@ -3,7 +3,7 @@
 // =========================================================
 
 import { initApp, onAuthReady, currentUser, currentIsAdmin } from "./ui-shared.js";
-import { getNote, updateNote, getChapter, getAllChapters, moveNoteToChapter } from "./data.js";
+import { getNote, updateNote, getChapter, getAllChapters, moveNoteToChapter, publishNote, unpublishNote } from "./data.js";
 import { initEditor, getEditorHtml } from "./editor.js";
 
 function getNoteId() {
@@ -20,6 +20,58 @@ let editorInitialized = false;
 function setStatus(text) {
   const el = document.getElementById("saveStatus");
   if (el) el.textContent = text;
+}
+
+function updatePublishBar() {
+  const isDraft = !note.status || note.status === "draft";
+  const bar = document.getElementById("publishBar");
+  if (!bar) return;
+  bar.innerHTML = `
+    <div class="publish-bar__status ${isDraft ? "publish-bar__status--draft" : "publish-bar__status--published"}">
+      ${isDraft
+        ? "📝 <strong>Draft</strong> — hanya kamu yang bisa melihat tulisan ini"
+        : "🌿 <strong>Published</strong> — tulisan sudah tayang dan bisa dibaca publik"}
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <a class="btn" href="note.html?id=${note.id}" target="_blank" title="Preview tulisan">👁 Preview</a>
+      ${isDraft
+        ? `<button class="btn btn-publish" id="publishBtn">Publish →</button>`
+        : `<button class="btn btn-unpublish" id="unpublishBtn">↩ Kembali ke Draft</button>`}
+    </div>
+  `;
+
+  document.getElementById("publishBtn")?.addEventListener("click", async () => {
+    const btn = document.getElementById("publishBtn");
+    btn.disabled = true;
+    btn.textContent = "Mempublish…";
+    try {
+      if (saveTimeout) { clearTimeout(saveTimeout); await doSave(); }
+      await publishNote(note.id);
+      note.status = "published";
+      updatePublishBar();
+      setStatus("dipublish ✓ · " + new Date().toLocaleTimeString("id-ID"));
+    } catch (err) {
+      alert("Gagal publish: " + err.message);
+      btn.disabled = false;
+      btn.textContent = "Publish →";
+    }
+  });
+
+  document.getElementById("unpublishBtn")?.addEventListener("click", async () => {
+    const btn = document.getElementById("unpublishBtn");
+    btn.disabled = true;
+    btn.textContent = "Memproses…";
+    try {
+      await unpublishNote(note.id);
+      note.status = "draft";
+      updatePublishBar();
+      setStatus("dikembalikan ke draft ✓");
+    } catch (err) {
+      alert("Gagal: " + err.message);
+      btn.disabled = false;
+      btn.textContent = "↩ Kembali ke Draft";
+    }
+  });
 }
 
 function scheduleAutosave() {
@@ -54,6 +106,7 @@ async function renderEditor() {
 
   root.innerHTML = `
     <div class="editor-shell">
+      <div class="publish-bar" id="publishBar"></div>
       <div class="editor-meta-bar">
         <input type="text" id="titleInput" value="${escapeHtml(note.judul)}" placeholder="Judul catatan">
         <select id="chapterSelect" class="btn">${chapterOptions}</select>
@@ -65,13 +118,13 @@ async function renderEditor() {
       <div class="editor-save-row">
         <span class="editor-save-row__status" id="saveStatus">tersimpan</span>
         <div style="display:flex; gap:10px;">
-          <a class="btn" href="note.html?id=${note.id}" target="_blank">👁 Lihat hasil</a>
           <a class="btn btn-primary" href="chapter.html?id=${note.chapterId}">Selesai</a>
         </div>
       </div>
     </div>
   `;
 
+  updatePublishBar();
   initEditor(document.getElementById("editorMount"), note.contentHtml, () => scheduleAutosave());
   editorInitialized = true;
 
@@ -84,7 +137,6 @@ async function renderEditor() {
     setStatus("dipindahkan ✓");
   });
 
-  // Simpan saat keluar halaman (jaga-jaga ada perubahan belum tersimpan)
   window.addEventListener("beforeunload", () => {
     if (saveTimeout) doSave();
   });

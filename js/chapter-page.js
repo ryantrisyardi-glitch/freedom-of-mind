@@ -3,7 +3,7 @@
 // =========================================================
 
 import { initApp, onAuthReady, currentIsAdmin, showModal, showConfirm } from "./ui-shared.js";
-import { getChapter, getNotesByChapter, createNote, deleteNote, updateNote, uploadToCloudinary } from "./data.js";
+import { getChapter, getNotesByChapter, getNotesByChapterForAdmin, createNote, deleteNote, updateNote, uploadToCloudinary } from "./data.js";
 
 function getChapterId() {
   return new URLSearchParams(location.search).get("id");
@@ -29,7 +29,10 @@ async function loadAndRender() {
     return;
   }
   try {
-    [chapter, notes] = await Promise.all([getChapter(chapterId), getNotesByChapter(chapterId)]);
+    [chapter, notes] = await Promise.all([
+      getChapter(chapterId),
+      currentIsAdmin ? getNotesByChapterForAdmin(chapterId) : getNotesByChapter(chapterId)
+    ]);
   } catch (err) {
     document.getElementById("noteList").innerHTML = `<div class="empty-state">Gagal memuat. ${err.message}</div>`;
     return;
@@ -58,11 +61,16 @@ function render() {
     list.innerHTML = `<div class="empty-state">Belum ada catatan di bagian ini.</div>`;
     return;
   }
-  list.innerHTML = notes.map((n) => `
+  list.innerHTML = notes.map((n) => {
+    const isDraft = n.status === "draft" || !n.status;
+    const draftBadge = isDraft && currentIsAdmin
+      ? `<span class="badge-draft" title="Belum dipublish">draft</span>`
+      : "";
+    return `
     <article class="note-row is-clickable" data-id="${n.id}" data-href="note.html?id=${n.id}">
       ${currentIsAdmin ? `<span class="sortable-drag-handle" title="Seret untuk urutkan">⠿</span>` : ""}
       <div class="note-row__main">
-        <h3><a href="note.html?id=${n.id}" class="card-link">${escapeHtml(n.judul)}</a></h3>
+        <h3><a href="note.html?id=${n.id}" class="card-link">${escapeHtml(n.judul)}</a> ${draftBadge}</h3>
         <div class="note-row__meta">
           <span>${formatTanggal(n.updatedAt)}</span>
           <div class="note-row__tags">${(n.tag || []).map((t) => `<span>#${escapeHtml(t)}</span>`).join("")}</div>
@@ -83,7 +91,7 @@ function render() {
           <button class="btn btn-icon btn-danger" data-del="${n.id}" title="Hapus">🗑</button>
         </div>` : ""}
     </article>
-  `).join("");
+  `}).join("");
 
   // Hapus handler
   list.querySelectorAll("[data-del]").forEach((btn) =>
@@ -236,6 +244,5 @@ async function handleCoverUpload(noteId, btn) {
 
 (async () => {
   await initApp();
-  onAuthReady(() => { if (chapter) render(); });
-  await loadAndRender();
+  onAuthReady(() => { loadAndRender(); });
 })();

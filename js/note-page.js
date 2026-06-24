@@ -3,7 +3,7 @@
 // =========================================================
 
 import { initApp, onAuthReady, currentUser, currentIsAdmin, showConfirm } from "./ui-shared.js";
-import { getNote, getChapter, addComment, deleteComment, listenComments } from "./data.js";
+import { getNote, getChapter, addComment, deleteComment, listenComments, publishNote, unpublishNote } from "./data.js";
 import { auth, googleSignIn } from "./firebase-core.js";
 
 function getNoteId() {
@@ -158,6 +158,20 @@ async function init() {
     root.innerHTML = `<div class="empty-state">Catatan tidak ditemukan. <a href="index.html">Kembali</a></div>`;
     return;
   }
+
+  const isDraft = note.status === "draft" || !note.status;
+
+  // Blokir akses pembaca jika masih draft
+  if (isDraft && !currentIsAdmin) {
+    root.innerHTML = `
+      <div class="empty-state">
+        <div style="font-size:2rem;margin-bottom:12px;">🔒</div>
+        <p>Tulisan ini belum dipublikasikan dan tidak tersedia untuk umum.</p>
+        <p><a href="index.html">← Kembali ke beranda</a></p>
+      </div>`;
+    return;
+  }
+
   chapter = await getChapter(note.chapterId).catch(() => null);
   document.title = note.judul + " — Freedom of Mind";
 
@@ -168,31 +182,93 @@ async function init() {
 
   const tagsHtml = (note.tag || []).map((t) => `<span>#${escapeHtml(t)}</span>`).join(" ");
 
+  // Draft banner untuk admin
+  const draftBannerHtml = isDraft && currentIsAdmin ? `
+    <div class="draft-banner" id="draftBanner">
+      <span class="draft-banner__icon">📝</span>
+      <span class="draft-banner__text">
+        Ini adalah <strong>preview draft</strong> — tulisan belum tayang untuk publik.
+      </span>
+      <div class="draft-banner__actions">
+        <a class="btn" href="editor.html?id=${note.id}">✎ Edit</a>
+        <button class="btn btn-publish" id="quickPublishBtn">Publish →</button>
+      </div>
+    </div>
+  ` : "";
+
+  // Edit/publish shortcut bar untuk admin pada note yang sudah published
+  const adminBarHtml = !isDraft && currentIsAdmin ? `
+    <div class="draft-banner" style="background:#f2f9f2;border-color:#b8d8b8;color:#4a6a4a;" id="adminBar">
+      <span class="draft-banner__icon">🌿</span>
+      <span class="draft-banner__text">Tulisan ini sudah <strong>Published</strong> dan tampil ke publik.</span>
+      <div class="draft-banner__actions">
+        <a class="btn" href="editor.html?id=${note.id}">✎ Edit</a>
+        <button class="btn btn-unpublish" id="quickUnpublishBtn">↩ Ke Draft</button>
+      </div>
+    </div>
+  ` : "";
+
   root.innerHTML = `
+    ${draftBannerHtml}
+    ${adminBarHtml}
     <div class="note-page__meta">
       <span>${formatTanggal(note.updatedAt)}</span>
       ${tagsHtml ? `<span>${tagsHtml}</span>` : ""}
     </div>
     <h1>${escapeHtml(note.judul)}</h1>
     <div class="note-content">${note.contentHtml || ""}</div>
+    ${!isDraft ? `
     <div class="share-bar" id="shareBar"></div>
     <section class="comments">
       <h3>Tanggapan pembaca</h3>
       <div class="comments__auth" id="authArea"></div>
       <div id="commentFormSlot"></div>
       <div class="comment-list" id="commentList"></div>
-    </section>
+    </section>` : ""}
   `;
 
-  renderShareBar();
-  renderAuthArea();
-  listenComments(note.id, renderComments, (err) => {
-    document.getElementById("commentList").innerHTML = `<p class="comments__empty">Gagal memuat komentar: ${err.message}</p>`;
+  // Handler quick publish dari banner
+  document.getElementById("quickPublishBtn")?.addEventListener("click", async (e) => {
+    const btn = e.target;
+    btn.disabled = true; btn.textContent = "Mempublish…";
+    try {
+      await publishNote(note.id);
+      note.status = "published";
+      // Reload halaman agar tampilan berubah ke mode published
+      location.reload();
+    } catch (err) {
+      alert("Gagal publish: " + err.message);
+      btn.disabled = false; btn.textContent = "Publish →";
+    }
   });
+
+  // Handler quick unpublish dari banner
+  document.getElementById("quickUnpublishBtn")?.addEventListener("click", async (e) => {
+    const btn = e.target;
+    btn.disabled = true; btn.textContent = "Memproses…";
+    try {
+      await unpublishNote(note.id);
+      note.status = "draft";
+      location.reload();
+    } catch (err) {
+      alert("Gagal: " + err.message);
+      btn.disabled = false; btn.textContent = "↩ Ke Draft";
+    }
+  });
+
+  if (!isDraft) {
+    renderShareBar();
+    renderAuthArea();
+    listenComments(note.id, renderComments, (err) => {
+      document.getElementById("commentList").innerHTML = `<p class="comments__empty">Gagal memuat komentar: ${err.message}</p>`;
+    });
+  }
 }
 
 (async () => {
   await initApp();
-  onAuthReady(() => { renderAuthArea(); });
-  await init();
+  onAuthReady(() => {
+    renderAuthArea();
+    init();
+  });
 })();

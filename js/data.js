@@ -123,7 +123,7 @@ export async function getNotesByChapter(chapterId) {
   );
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
-    .filter((n) => !n.deletedAt);
+    .filter((n) => !n.deletedAt && (n.status === "published" || !n.status));
 }
 
 export async function getAllNotes() {
@@ -153,6 +153,7 @@ export async function createNote({ chapterId, judul, tag }) {
     judul: judul || "Catatan baru",
     tag: tag || [],
     contentHtml: "",
+    status: "draft",
     urutan: maxUrutan + 1,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -180,6 +181,36 @@ export async function deleteNoteForever(noteId) {
 
 export async function moveNoteToChapter(noteId, newChapterId) {
   return updateDoc(doc(db, "notes", noteId), { chapterId: newChapterId, updatedAt: serverTimestamp() });
+}
+
+/** Publish: ubah status menjadi 'published' dan catat waktu publish */
+export async function publishNote(noteId) {
+  return updateDoc(doc(db, "notes", noteId), {
+    status: "published",
+    publishedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** Kembali ke draft: ubah status menjadi 'draft' */
+export async function unpublishNote(noteId) {
+  return updateDoc(doc(db, "notes", noteId), {
+    status: "draft",
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Ambil semua notes dalam chapter untuk ADMIN (termasuk draft).
+ * Untuk pembaca biasa, gunakan getNotesByChapter yang hanya mengembalikan published.
+ */
+export async function getNotesByChapterForAdmin(chapterId) {
+  const snap = await getDocs(
+    query(collection(db, "notes"), where("chapterId", "==", chapterId), orderBy("urutan", "asc"))
+  );
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((n) => !n.deletedAt);
 }
 
 // ---------- Cloudinary Upload ----------
