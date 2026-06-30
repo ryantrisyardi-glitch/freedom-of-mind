@@ -9,6 +9,7 @@ import { defaultChapterArt } from "./chapter-art.js";
 let chapters = [];
 let noteCounts = {};
 let activeIndex = 0;
+let lastTrackOffset = 0; // posisi geser terakhir, dipakai supaya animasi slide nyambung mulus
 
 async function loadAndRender() {
   const showcase = document.getElementById("chapterShowcase");
@@ -42,15 +43,13 @@ function render() {
     return;
   }
 
-  const prevIdx = activeIndex - 1;
-  const nextIdx = activeIndex + 1;
-
+  // Semua chapter dirender penuh (kartu utuh: gambar + judul + tagline) dalam
+  // satu strip ("track") yang bisa digeser — bukan cuma 3 kartu yang ditukar.
+  // Kartu yang sedang aktif otomatis melebar & menonjol lewat class "is-active".
   showcase.innerHTML = `
     <div class="chapter-showcase__viewport" id="showcaseViewport">
       <div class="chapter-showcase__track" id="showcaseTrack">
-        ${prevIdx >= 0 ? sideCardHtml(prevIdx) : ""}
-        ${activeCardHtml(activeIndex)}
-        ${nextIdx < chapters.length ? sideCardHtml(nextIdx) : ""}
+        ${chapters.map((c, i) => cardHtml(c, i)).join("")}
       </div>
     </div>
     <button class="showcase-nav showcase-nav--prev" id="navPrev" aria-label="Sebelumnya" ${activeIndex === 0 ? "disabled" : ""}>‹</button>
@@ -62,6 +61,7 @@ function render() {
 
   renderAddButton();
   attachEvents();
+  animateToActive();
 }
 
 function renderAddButton() {
@@ -75,27 +75,20 @@ function renderAddButton() {
   document.getElementById("addChapterBtn").addEventListener("click", handleAddChapter);
 }
 
-function sideCardHtml(idx) {
-  const c = chapters[idx];
-  return `
-    <article class="showcase-card showcase-card--side" data-idx="${idx}">
-      <p class="showcase-card__chip">Chapter ${chapterNumber(idx)}</p>
-      <h3>${escapeHtml(c.judul)}</h3>
-      <p class="showcase-card__hint">${escapeHtml(c.tagline || c.deskripsi || "")}</p>
-      <span class="showcase-card__arrow">→</span>
-    </article>
-  `;
-}
-
-function activeCardHtml(idx) {
-  const c = chapters[idx];
+/** Satu template kartu yang sama untuk semua chapter — supaya setiap kartu
+ *  (aktif maupun tidak) selalu tampil "utuh" dengan ilustrasi/gambar sampul,
+ *  bukan cuma kotak teks polos. Kartu aktif membesar & menampilkan elemen
+ *  tambahan (badge, CTA, jumlah catatan) lewat CSS, bukan template terpisah. */
+function cardHtml(c, idx) {
+  const isActive = idx === activeIndex;
   const artBg = c.gambar ? ` style="background-image:url('${c.gambar.replace(/'/g, "")}')"` : "";
   const art = c.gambar ? "" : defaultChapterArt(idx);
+
   return `
-    <article class="showcase-card showcase-card--active" data-idx="${idx}" data-goto="chapter.html?id=${c.id}">
+    <article class="showcase-card ${isActive ? "is-active" : ""}" data-idx="${idx}" data-goto="chapter.html?id=${c.id}">
       <div class="showcase-card__body">
         <span class="showcase-card__badge">You are here</span>
-        <p class="showcase-card__chip showcase-card__chip--active">Chapter ${chapterNumber(idx)}</p>
+        <p class="showcase-card__chip">Chapter ${chapterNumber(idx)}</p>
         <h2>${escapeHtml(c.judul)}</h2>
         <p class="showcase-card__tagline">${escapeHtml(c.tagline || c.deskripsi || "")}</p>
         <a class="btn btn-primary showcase-card__cta" href="chapter.html?id=${c.id}">Mulai Baca →</a>
@@ -107,11 +100,55 @@ function activeCardHtml(idx) {
             <button class="btn-icon btn" data-edit="${c.id}" title="Edit">✎</button>
             <button class="btn-icon btn-danger btn" data-del="${c.id}" title="Hapus">🗑</button>
           </div>` : ""}
+        <span class="showcase-card__peek-arrow">→</span>
       </div>
       <div class="showcase-card__art"${artBg}>${art}</div>
     </article>
   `;
 }
+
+/** Hitung offset supaya kartu aktif berada di tengah viewport, lalu geser
+ *  ke sana dengan animasi mulus (seperti strip yang berputar/orbit). */
+function computeCenterOffset(track, viewport) {
+  const cards = [...track.children];
+  const activeCard = cards[activeIndex];
+  if (!activeCard) return 0;
+  const viewportWidth = viewport.clientWidth;
+  const activeCenter = activeCard.offsetLeft + activeCard.offsetWidth / 2;
+  return viewportWidth / 2 - activeCenter;
+}
+
+function animateToActive() {
+  const viewport = document.getElementById("showcaseViewport");
+  const track = document.getElementById("showcaseTrack");
+  if (!viewport || !track) return;
+
+  // Langkah 1: "lompat" tanpa animasi ke posisi terakhir (DOM baru dibuat ulang,
+  // jadi mulai dari titik yang sama seperti sebelum re-render).
+  track.style.transition = "none";
+  track.style.transform = `translateX(${lastTrackOffset}px)`;
+  void track.offsetHeight; // paksa reflow supaya browser benar-benar menerapkan posisi di atas
+
+  // Langkah 2: baru animasikan secara mulus menuju posisi kartu aktif yang baru.
+  requestAnimationFrame(() => {
+    track.style.transition = "";
+    const target = computeCenterOffset(track, viewport);
+    track.style.transform = `translateX(${target}px)`;
+    lastTrackOffset = target;
+  });
+}
+
+window.addEventListener("resize", () => {
+  const viewport = document.getElementById("showcaseViewport");
+  const track = document.getElementById("showcaseTrack");
+  if (!viewport || !track) return;
+  track.style.transition = "none";
+  const target = computeCenterOffset(track, viewport);
+  track.style.transform = `translateX(${target}px)`;
+  lastTrackOffset = target;
+  void track.offsetHeight;
+  track.style.transition = "";
+});
 
 function setActive(idx) {
   activeIndex = Math.max(0, Math.min(chapters.length - 1, idx));
@@ -165,10 +202,8 @@ function attachDrag() {
   let deltaX = 0;
   let downTarget = null;
 
-  const hasPrev = activeIndex > 0;
-  const hasNext = activeIndex < chapters.length - 1;
   const DRAG_THRESHOLD = 10; // px gerakan minimum supaya dianggap drag, bukan klik biasa
-  const SWIPE_THRESHOLD = 70; // px gerakan minimum supaya drag dianggap "ganti chapter"
+  const SWIPE_THRESHOLD = 60; // px gerakan minimum per kartu supaya dianggap "pindah satu chapter"
 
   function onPointerMove(e) {
     if (!dragging) return;
@@ -176,32 +211,37 @@ function attachDrag() {
 
     if (!wasDragged && Math.abs(deltaX) < DRAG_THRESHOLD) return; // belum dianggap drag
 
-    if (!wasDragged) track.classList.add("is-dragging"); // drag baru resmi dimulai
+    if (!wasDragged) track.style.transition = "none"; // drag baru resmi dimulai, matikan animasi sementara
     wasDragged = true;
 
-    let visualDelta = deltaX;
-    // Efek rubber-band kalau sudah di ujung kiri/kanan (chapter pertama/terakhir)
-    if ((!hasPrev && visualDelta > 0) || (!hasNext && visualDelta < 0)) {
-      visualDelta *= 0.35;
-    }
-    track.style.transform = `translateX(${visualDelta}px)`;
+    // Geser track mengikuti jari/mouse secara langsung dari posisi terakhir —
+    // ini yang memberi kesan "memutar strip kartu" yang halus & responsif.
+    track.style.transform = `translateX(${lastTrackOffset + deltaX}px)`;
   }
 
   function onPointerUp() {
     if (!dragging) return;
     dragging = false;
-    track.classList.remove("is-dragging");
     document.removeEventListener("pointermove", onPointerMove);
     document.removeEventListener("pointerup", onPointerUp);
     document.removeEventListener("pointercancel", onPointerUp);
 
     if (wasDragged) {
-      if (deltaX <= -SWIPE_THRESHOLD && hasNext) {
-        setActive(activeIndex + 1);
-      } else if (deltaX >= SWIPE_THRESHOLD && hasPrev) {
-        setActive(activeIndex - 1);
+      // Boleh lompat lebih dari 1 chapter sekali geser kalau geserannya jauh/cepat.
+      const cardsMoved = Math.round(-deltaX / SWIPE_THRESHOLD);
+      const newIndex = Math.max(0, Math.min(chapters.length - 1, activeIndex + cardsMoved));
+      if (newIndex !== activeIndex) {
+        // Simpan posisi geser saat ini supaya animasi lanjut mulus dari sini
+        // (bukan lompat balik ke posisi tengah lama dulu baru animasi).
+        lastTrackOffset = lastTrackOffset + deltaX;
+        activeIndex = newIndex;
+        render();
       } else {
-        track.style.transform = "translateX(0)";
+        track.style.transition = "";
+        // Tidak cukup jauh untuk pindah chapter → kembali mulus ke posisi semula.
+        requestAnimationFrame(() => {
+          track.style.transform = `translateX(${lastTrackOffset}px)`;
+        });
       }
       setTimeout(() => { wasDragged = false; }, 50);
     } else {
@@ -231,14 +271,13 @@ function handleTap(target) {
   if (!target) return;
   if (target.closest("[data-admin-row]")) return; // sudah ditangani tombol admin masing-masing
 
-  const activeCard = target.closest(".showcase-card--active");
-  if (activeCard) {
-    window.location.href = activeCard.dataset.goto;
-    return;
-  }
-  const sideCard = target.closest(".showcase-card--side");
-  if (sideCard) {
-    setActive(Number(sideCard.dataset.idx));
+  const card = target.closest(".showcase-card");
+  if (!card) return;
+
+  if (card.classList.contains("is-active")) {
+    window.location.href = card.dataset.goto;
+  } else {
+    setActive(Number(card.dataset.idx));
   }
 }
 

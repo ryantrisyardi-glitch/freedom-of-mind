@@ -121,106 +121,133 @@ button{ font-family: inherit; }
 .chapter-showcase__track{
   display: flex;
   align-items: stretch;
-  justify-content: center;
-  gap: 22px;
+  gap: 18px;
   padding: 6px 4px 26px;
   will-change: transform;
-  transition: transform .38s cubic-bezier(.22,.61,.36,1);
+  transition: transform .55s cubic-bezier(.22,.61,.36,1);
   cursor: grab;
 }
-.chapter-showcase__track.is-dragging{
-  transition: none;
-  cursor: grabbing;
-}
-.chapter-showcase__track.is-dragging .showcase-card{
-  transition: none;
-}
+
+/* Satu template kartu dipakai untuk SEMUA chapter — setiap kartu selalu
+   tampil utuh (ada gambar + judul + chip), bukan cuma kotak teks. Kartu yang
+   aktif melebar & menonjol secara halus lewat transisi width/opacity. */
 .showcase-card{
   position: relative;
+  display: flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  width: 230px;
   background: var(--paper-card);
   border: 1px solid var(--line);
   border-radius: 18px;
+  overflow: hidden;
   box-shadow: 0 1px 0 var(--shadow);
   cursor: pointer;
-  transition: transform .22s ease, box-shadow .22s ease, opacity .22s ease;
+  opacity: .8;
   user-select: none;
   -webkit-user-drag: none;
+  transition: width .55s cubic-bezier(.22,.61,.36,1), opacity .4s ease,
+              box-shadow .4s ease, border-color .4s ease, transform .3s ease;
 }
 .showcase-card img, .showcase-card a{ -webkit-user-drag: none; user-drag: none; }
-.showcase-card--side{
-  flex: 0 0 230px;
-  padding: 22px 20px;
-  opacity: .82;
-}
-.showcase-card--side:hover{ opacity: 1; transform: translateY(-3px); box-shadow: 0 14px 26px var(--shadow); }
-.showcase-card__chip{
-  font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em;
-  text-transform: uppercase; color: var(--sage); margin: 0 0 10px;
-}
-.showcase-card--side h3{
-  font-family: var(--font-display); font-weight: 600; font-size: 1.32rem;
-  margin: 0 0 10px; color: var(--ink);
-}
-.showcase-card__hint{ color: var(--ink-soft); font-size: .9rem; margin: 0; }
-.showcase-card__arrow{
-  position: absolute; right: 18px; bottom: 18px;
-  width: 34px; height: 34px; border-radius: 50%;
-  border: 1px solid var(--line); display: flex; align-items: center; justify-content: center;
-  color: var(--ink); font-size: 1rem;
-}
+.showcase-card:hover{ opacity: 1; transform: translateY(-3px); box-shadow: 0 14px 26px var(--shadow); }
 
-.showcase-card--active{
-  flex: 0 0 min(680px, 100%);
-  display: grid;
-  grid-template-columns: 1.15fr 1fr;
-  align-items: stretch;
-  overflow: hidden;
+.showcase-card.is-active{
+  width: min(680px, 86vw);
+  opacity: 1;
   border-color: var(--terracotta-dim);
   box-shadow: 0 18px 40px var(--shadow);
-  animation: showcaseActiveIn .38s cubic-bezier(.22,.61,.36,1);
 }
-@keyframes showcaseActiveIn{
-  from{ opacity: 0; transform: scale(.96); }
-  to{ opacity: 1; transform: scale(1); }
-}
+.showcase-card.is-active:hover{ transform: none; }
+
 .showcase-card__body{
-  padding: 26px 28px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 22px 20px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  justify-content: center;
+  position: relative;
+}
+.showcase-card.is-active .showcase-card__body{ padding: 26px 28px; justify-content: flex-start; }
+
+.showcase-card__chip{
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--sage); margin: 0 0 8px;
+}
+.showcase-card.is-active .showcase-card__chip{ color: var(--terracotta); }
+
+.showcase-card h2{
+  font-family: var(--font-display); font-weight: 600; font-size: 1.18rem; line-height: 1.18;
+  margin: 0 0 8px; color: var(--ink);
+  transition: font-size .4s ease;
+}
+.showcase-card.is-active h2{ font-weight: 700; font-size: 1.85rem; margin-bottom: 8px; }
+
+/* Elemen yang hanya muncul saat kartu aktif (badge, tagline, CTA, jumlah
+   catatan, baris admin) — disembunyikan secara halus (bukan display:none)
+   supaya transisinya tetap mulus. */
+.showcase-card__badge,
+.showcase-card__tagline,
+.showcase-card__cta,
+.showcase-card__count,
+.showcase-card__admin-row{
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  margin: 0;
+  pointer-events: none;
+  transition: max-height .4s ease, opacity .25s ease, margin .4s ease;
 }
 .showcase-card__badge{
   display: inline-block;
   font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em; font-weight: 600;
   text-transform: uppercase; color: var(--paper);
-  background: var(--terracotta); border-radius: 999px; padding: 5px 12px; margin-bottom: 14px;
+  background: var(--terracotta); border-radius: 999px; padding: 0 12px;
+  order: -1;
 }
-.showcase-card__chip--active{ color: var(--terracotta); margin-bottom: 8px; }
-.showcase-card--active h2{
-  font-family: var(--font-display); font-weight: 700; font-size: 1.85rem; line-height: 1.12;
-  margin: 0 0 8px; color: var(--ink);
-}
-.showcase-card__tagline{ color: var(--ink-soft); font-size: .95rem; margin: 0 0 20px; }
-.showcase-card__cta{
-  margin-top: auto;
-  display: inline-flex; align-items: center; gap: 8px;
-  border-radius: 999px; padding: 11px 20px;
-}
-.showcase-card__count{
-  font-family: var(--font-mono); font-size: 11px; color: var(--sage); margin-top: 12px;
-}
-.showcase-card__admin-row{
-  display: flex; gap: 8px; margin-top: 14px;
-}
+.showcase-card.is-active .showcase-card__badge{ max-height: 28px; opacity: 1; margin-bottom: 12px; padding: 5px 12px; pointer-events: auto; }
 
+.showcase-card__tagline{ color: var(--ink-soft); font-size: .95rem; }
+.showcase-card.is-active .showcase-card__tagline{ max-height: 80px; opacity: 1; margin-bottom: 18px; pointer-events: auto; }
+
+.showcase-card__cta{
+  display: inline-flex; align-items: center; gap: 8px;
+  border-radius: 999px; padding: 0 20px;
+  margin-top: auto;
+}
+.showcase-card.is-active .showcase-card__cta{ max-height: 50px; opacity: 1; padding: 11px 20px; margin-top: auto; pointer-events: auto; }
+
+.showcase-card__count{ font-family: var(--font-mono); font-size: 11px; color: var(--sage); }
+.showcase-card.is-active .showcase-card__count{ max-height: 20px; opacity: 1; margin-top: 10px; pointer-events: auto; }
+
+.showcase-card__admin-row{ display: flex; gap: 8px; }
+.showcase-card.is-active .showcase-card__admin-row{ max-height: 50px; opacity: 1; margin-top: 14px; pointer-events: auto; }
+
+/* Ikon panah kecil — penanda "klik untuk lihat" pada kartu yang belum aktif */
+.showcase-card__peek-arrow{
+  position: absolute; right: 14px; bottom: 14px;
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid var(--line); display: flex; align-items: center; justify-content: center;
+  color: var(--ink); font-size: .95rem; background: var(--paper-card);
+  transition: opacity .3s ease;
+}
+.showcase-card.is-active .showcase-card__peek-arrow{ opacity: 0; pointer-events: none; }
+
+/* Gambar/ilustrasi — SELALU tampil di setiap kartu (aktif maupun tidak),
+   supaya tidak ada lagi kartu yang cuma berisi teks polos. Pada kartu kecil
+   gambarnya otomatis "mengintip"/terpotong di tepi, persis seperti referensi. */
 .showcase-card__art{
   position: relative;
+  flex: 0 0 38%;
+  min-width: 64px;
   background: linear-gradient(160deg, var(--paper-dim), var(--paper));
   background-size: cover;
   background-position: center;
-  min-height: 220px;
   overflow: hidden;
 }
+.showcase-card.is-active .showcase-card__art{ flex-basis: 44%; min-height: 220px; }
 .showcase-card__art svg{ position: absolute; inset: 0; width: 100%; height: 100%; }
 .showcase-card__art::before,
 .showcase-card__art::after{
@@ -275,36 +302,20 @@ button{ font-family: inherit; }
 
 @media (max-width: 880px){
   .chapter-showcase__track{ gap: 12px; }
-  .showcase-card--side{
-    flex: 0 0 96px;
-    padding: 18px 12px;
-    overflow: hidden;
-  }
-  .showcase-card--side h3{ font-size: 1.02rem; }
-  .showcase-card__hint{ display: none; }
-  .showcase-card--active{ grid-template-columns: 1fr; flex-basis: min(560px, calc(100% - 220px)); }
-  .showcase-card__art{ min-height: 180px; order: -1; }
-  .showcase-nav--prev{ left: 6px; }
-  .showcase-nav--next{ right: 6px; }
+  .showcase-card{ width: 170px; }
+  .showcase-card.is-active{ width: min(560px, 88vw); }
+  .showcase-card h2{ font-size: 1.02rem; }
+  .showcase-card.is-active .showcase-card__art{ min-height: 180px; }
 }
 
 @media (max-width: 560px){
-  .chapter-showcase__track{ gap: 8px; padding: 6px 0 22px; }
-  .showcase-card--side{
-    flex: 0 0 46px;
-    padding: 0;
-  }
-  .showcase-card--side .showcase-card__chip,
-  .showcase-card--side h3,
-  .showcase-card--side .showcase-card__arrow{ display: none; }
-  .showcase-card--side::after{
-    content: "";
-    position: absolute; inset: 0;
-    background: linear-gradient(180deg, var(--terracotta-dim), var(--sage));
-    opacity: .28;
-  }
-  .showcase-card--active{ flex-basis: calc(100% - 108px); }
-  .showcase-card__body{ padding: 20px 18px; }
+  .chapter-showcase__track{ gap: 10px; padding: 6px 0 22px; }
+  .showcase-card{ width: 128px; }
+  .showcase-card.is-active{ width: min(420px, 90vw); }
+  .showcase-card__body{ padding: 16px 14px; }
+  .showcase-card.is-active .showcase-card__body{ padding: 22px 20px; }
+  .showcase-card h2{ font-size: .92rem; }
+  .showcase-card.is-active h2{ font-size: 1.5rem; }
   .showcase-nav{ display: none; } /* di mobile geser pakai swipe jari */
 }
 
