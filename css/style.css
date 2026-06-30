@@ -144,7 +144,9 @@ button{ font-family: inherit; }
   cursor: pointer;
   transition: transform .22s ease, box-shadow .22s ease, opacity .22s ease;
   user-select: none;
+  -webkit-user-drag: none;
 }
+.showcase-card img, .showcase-card a{ -webkit-user-drag: none; user-drag: none; }
 .showcase-card--side{
   flex: 0 0 230px;
   padding: 22px 20px;
@@ -272,11 +274,38 @@ button{ font-family: inherit; }
 .add-chapter-card:hover{ background: rgba(200,118,58,0.06); }
 
 @media (max-width: 880px){
-  .showcase-card--side{ display: none; }
-  .showcase-card--active{ grid-template-columns: 1fr; flex-basis: 100%; }
+  .chapter-showcase__track{ gap: 12px; }
+  .showcase-card--side{
+    flex: 0 0 96px;
+    padding: 18px 12px;
+    overflow: hidden;
+  }
+  .showcase-card--side h3{ font-size: 1.02rem; }
+  .showcase-card__hint{ display: none; }
+  .showcase-card--active{ grid-template-columns: 1fr; flex-basis: min(560px, calc(100% - 220px)); }
   .showcase-card__art{ min-height: 180px; order: -1; }
   .showcase-nav--prev{ left: 6px; }
   .showcase-nav--next{ right: 6px; }
+}
+
+@media (max-width: 560px){
+  .chapter-showcase__track{ gap: 8px; padding: 6px 0 22px; }
+  .showcase-card--side{
+    flex: 0 0 46px;
+    padding: 0;
+  }
+  .showcase-card--side .showcase-card__chip,
+  .showcase-card--side h3,
+  .showcase-card--side .showcase-card__arrow{ display: none; }
+  .showcase-card--side::after{
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, var(--terracotta-dim), var(--sage));
+    opacity: .28;
+  }
+  .showcase-card--active{ flex-basis: calc(100% - 108px); }
+  .showcase-card__body{ padding: 20px 18px; }
+  .showcase-nav{ display: none; } /* di mobile geser pakai swipe jari */
 }
 
 /* ---------- Notes list (inside a chapter) ---------- */
@@ -323,15 +352,22 @@ button{ font-family: inherit; }
 
 .note-list{ display:grid; gap: 14px; padding-bottom: 60px; }
 .note-row{
-  display:flex; align-items:center; justify-content: space-between; gap: 14px;
+  display:flex; align-items: stretch; gap: 0;
   background: var(--paper-card);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 10px 14px 10px 20px;
+  border-radius: 14px;
+  overflow: hidden;
+  padding: 0;
+  min-height: 128px;
   transition: transform .15s, box-shadow .15s;
 }
 .note-row:hover{ transform: translateX(2px); box-shadow: 0 6px 16px var(--shadow); }
-.note-row__main{ flex: 1; min-width: 0; padding: 8px 0; }
+.note-row__content{
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 14px 18px 14px 20px;
+}
+.note-row__main{ flex: 1; min-width: 0; padding: 0; }
 .note-row h3{ font-family: var(--font-display); font-weight:600; font-size:1.15rem; margin:0 0 4px; }
 .note-row h3 a{ color: var(--ink); }
 .note-row h3 a:hover{ color: var(--terracotta); text-decoration:none; }
@@ -339,15 +375,14 @@ button{ font-family: inherit; }
 .note-row__tags span{ background: rgba(122,139,127,0.12); padding:2px 8px; border-radius:999px; }
 .note-row__actions{ display:flex; gap:8px; flex-shrink:0; }
 
-/* ---------- Note row thumbnail ---------- */
+/* ---------- Note row cover image — full-bleed sampai batas atas/bawah/kanan kartu ---------- */
 .note-row__thumbnail {
   position: relative;
   flex-shrink: 0;
-  width: 130px;
-  height: 80px;
-  border-radius: 8px;
+  width: 200px;
+  align-self: stretch;
   overflow: hidden;
-  background: var(--paper-tint, #f0ece4);
+  background: var(--paper-dim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -357,12 +392,10 @@ button{ font-family: inherit; }
   height: 100%;
   object-fit: cover;
   display: block;
-  border-radius: 8px;
 }
 .note-row__cover-empty {
   width: 100%;
   height: 100%;
-  border-radius: 8px;
   background: repeating-linear-gradient(
     -45deg,
     transparent,
@@ -378,10 +411,9 @@ button{ font-family: inherit; }
   width: 100%;
   height: 100%;
   border: none;
-  border-radius: 8px;
   background: rgba(0,0,0,0);
   color: transparent;
-  font-size: 18px;
+  font-size: 20px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -391,7 +423,7 @@ button{ font-family: inherit; }
 .note-row__thumbnail:not(.has-image) .note-row__cover-btn {
   background: rgba(0,0,0,0.06);
   color: var(--ink-muted);
-  font-size: 22px;
+  font-size: 24px;
 }
 .note-row__thumbnail:not(.has-image) .note-row__cover-btn:hover {
   background: rgba(0,0,0,0.12);
@@ -402,10 +434,15 @@ button{ font-family: inherit; }
   color: #fff;
 }
 
-/* On mobile: thumbnail smaller */
+/* On mobile: thumbnail tetap full-bleed tapi sedikit lebih ramping */
 @media (max-width: 600px) {
-  .note-row__thumbnail { width: 90px; height: 62px; }
-  .note-row { padding: 8px 10px 8px 14px; }
+  .note-row__thumbnail { width: 110px; }
+  .note-row__content { padding: 12px 14px 12px 16px; }
+  .note-row{ min-height: 104px; }
+}
+@media (max-width: 420px){
+  .note-row__content{ flex-wrap: wrap; }
+  .note-row__actions{ width: 100%; justify-content: flex-end; }
 }
 
 .add-note-bar{ margin-bottom: 22px; }
@@ -473,18 +510,7 @@ button{ font-family: inherit; }
   float: none; width: 70%; margin: 10px auto 20px; clear: both;
 }
 .note-content figure.img-pos-full{
-  float: none; width: 100%; margin: 18px 0 26px; clear: both;
-}
-.note-content figure.img-pos-full img{
-  width: 100%;
-  height: auto;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  border-radius: 16px;
-  box-shadow: 0 14px 32px var(--shadow);
-}
-@media (max-width: 640px){
-  .note-content figure.img-pos-full img{ aspect-ratio: 4 / 3; }
+  float: none; width: 100%; margin: 10px 0 22px; clear: both;
 }
 
 @media (max-width: 640px){
@@ -590,8 +616,7 @@ button{ font-family: inherit; }
 .editor-area figure.img-pos-left{ float:left; width:42%; margin:0 18px 12px 0; }
 .editor-area figure.img-pos-right{ float:right; width:42%; margin:0 0 12px 18px; }
 .editor-area figure.img-pos-center{ float:none; width:65%; margin: 8px auto 16px; clear:both; }
-.editor-area figure.img-pos-full{ float:none; width:100%; margin: 12px 0 18px; clear:both; }
-.editor-area figure.img-pos-full img{ aspect-ratio: 16/9; object-fit: cover; border-radius: 16px; }
+.editor-area figure.img-pos-full{ float:none; width:100%; margin: 8px 0 18px; clear:both; }
 
 .img-controls{
   position:absolute; top:6px; right:6px;
@@ -1152,8 +1177,6 @@ button{ font-family: inherit; }
 @media (max-width: 600px){
   .masthead{ padding: 32px 0 4px; }
   .editor-area{ padding: 20px 18px; }
-  .note-row{ flex-direction: column; align-items: stretch; }
-  .note-row__actions{ justify-content: flex-end; }
 }
 
 /* ========================================================

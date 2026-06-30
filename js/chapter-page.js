@@ -79,13 +79,20 @@ function render() {
       : "";
     return `
     <article class="note-row is-clickable" data-id="${n.id}" data-href="note.html?id=${n.id}">
-      ${currentIsAdmin ? `<span class="sortable-drag-handle" title="Seret untuk urutkan">⠿</span>` : ""}
-      <div class="note-row__main">
-        <h3><a href="note.html?id=${n.id}" class="card-link">${escapeHtml(n.judul)}</a> ${draftBadge}</h3>
-        <div class="note-row__meta">
-          <span>${formatTanggal(n.updatedAt)}</span>
-          <div class="note-row__tags">${(n.tag || []).map((t) => `<span>#${escapeHtml(t)}</span>`).join("")}</div>
+      <div class="note-row__content">
+        ${currentIsAdmin ? `<span class="sortable-drag-handle" title="Seret untuk urutkan">⠿</span>` : ""}
+        <div class="note-row__main">
+          <h3><a href="note.html?id=${n.id}" class="card-link">${escapeHtml(n.judul)}</a> ${draftBadge}</h3>
+          <div class="note-row__meta">
+            <span>${formatTanggal(n.updatedAt)}</span>
+            <div class="note-row__tags">${(n.tag || []).map((t) => `<span>#${escapeHtml(t)}</span>`).join("")}</div>
+          </div>
         </div>
+        ${currentIsAdmin ? `
+          <div class="note-row__actions">
+            <a class="btn btn-icon" href="editor.html?id=${n.id}" title="Edit">✎</a>
+            <button class="btn btn-icon btn-danger" data-del="${n.id}" title="Hapus">🗑</button>
+          </div>` : ""}
       </div>
       <div class="note-row__thumbnail ${n.coverImage ? "has-image" : ""}">
         ${n.coverImage
@@ -96,11 +103,6 @@ function render() {
             ${n.coverImage ? "✎" : "＋"}
           </button>` : ""}
       </div>
-      ${currentIsAdmin ? `
-        <div class="note-row__actions">
-          <a class="btn btn-icon" href="editor.html?id=${n.id}" title="Edit">✎</a>
-          <button class="btn btn-icon btn-danger" data-del="${n.id}" title="Hapus">🗑</button>
-        </div>` : ""}
     </article>
   `}).join("");
 

@@ -170,6 +170,7 @@ function attachDrag() {
   const viewport = document.getElementById("showcaseViewport");
   const track = document.getElementById("showcaseTrack");
   if (!viewport || !track) return;
+  wasDragged = false;
 
   let startX = 0;
   let dragging = false;
@@ -182,29 +183,38 @@ function attachDrag() {
     // Hanya tombol primer (klik kiri mouse), abaikan klik kanan / multi-touch
     if (e.pointerType === "mouse" && e.button !== 0) return;
     dragging = true;
-    wasDragged = false;
     startX = e.clientX;
     deltaX = 0;
-    track.classList.add("is-dragging");
     track.setPointerCapture?.(e.pointerId);
   }
+
+  // Ambang batas supaya gerakan mouse super kecil saat klik biasa di PC
+  // tidak salah dianggap sebagai drag (yang akan membatalkan klik buka chapter).
+  const DRAG_THRESHOLD = 10;
 
   function onPointerMove(e) {
     if (!dragging) return;
     deltaX = e.clientX - startX;
 
+    if (!wasDragged && Math.abs(deltaX) < DRAG_THRESHOLD) return; // belum dianggap drag
+
+    if (!wasDragged) track.classList.add("is-dragging"); // drag baru resmi dimulai
+    wasDragged = true;
+
+    let visualDelta = deltaX;
     // Efek rubber-band kalau sudah di ujung kiri/kanan (chapter pertama/terakhir)
-    if ((!hasPrev && deltaX > 0) || (!hasNext && deltaX < 0)) {
-      deltaX *= 0.35;
+    if ((!hasPrev && visualDelta > 0) || (!hasNext && visualDelta < 0)) {
+      visualDelta *= 0.35;
     }
-    if (Math.abs(deltaX) > 4) wasDragged = true;
-    track.style.transform = `translateX(${deltaX}px)`;
+    track.style.transform = `translateX(${visualDelta}px)`;
   }
 
   function onPointerUp() {
     if (!dragging) return;
     dragging = false;
     track.classList.remove("is-dragging");
+
+    if (!wasDragged) return; // klik biasa, biarkan event "click" yang menangani navigasi
 
     const THRESHOLD = 70;
     if (deltaX <= -THRESHOLD && hasNext) {
@@ -214,8 +224,8 @@ function attachDrag() {
     } else {
       track.style.transform = "translateX(0)";
     }
-    // Biarkan event "click" berikutnya (yang menyusul pointerup) tahu bahwa
-    // ini adalah akhir dari drag, bukan klik biasa — lalu reset.
+    // Biarkan event "click" berikutnya (yang menyusul pointerup setelah drag
+    // sungguhan) tahu untuk tidak memicu navigasi — lalu reset.
     setTimeout(() => { wasDragged = false; }, 50);
   }
 
