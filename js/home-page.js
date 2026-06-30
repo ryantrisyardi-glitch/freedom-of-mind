@@ -46,10 +46,12 @@ function render() {
   const nextIdx = activeIndex + 1;
 
   showcase.innerHTML = `
-    <div class="chapter-showcase__track" id="showcaseTrack">
-      ${prevIdx >= 0 ? sideCardHtml(prevIdx) : ""}
-      ${activeCardHtml(activeIndex)}
-      ${nextIdx < chapters.length ? sideCardHtml(nextIdx) : ""}
+    <div class="chapter-showcase__viewport" id="showcaseViewport">
+      <div class="chapter-showcase__track" id="showcaseTrack">
+        ${prevIdx >= 0 ? sideCardHtml(prevIdx) : ""}
+        ${activeCardHtml(activeIndex)}
+        ${nextIdx < chapters.length ? sideCardHtml(nextIdx) : ""}
+      </div>
     </div>
     <button class="showcase-nav showcase-nav--prev" id="navPrev" aria-label="Sebelumnya" ${activeIndex === 0 ? "disabled" : ""}>‹</button>
     <button class="showcase-nav showcase-nav--next" id="navNext" aria-label="Berikutnya" ${activeIndex === chapters.length - 1 ? "disabled" : ""}>›</button>
@@ -90,7 +92,7 @@ function activeCardHtml(idx) {
   const artBg = c.gambar ? ` style="background-image:url('${c.gambar.replace(/'/g, "")}')"` : "";
   const art = c.gambar ? "" : defaultChapterArt(idx);
   return `
-    <article class="showcase-card showcase-card--active" data-idx="${idx}">
+    <article class="showcase-card showcase-card--active" data-idx="${idx}" data-goto="chapter.html?id=${c.id}">
       <div class="showcase-card__body">
         <span class="showcase-card__badge">You are here</span>
         <p class="showcase-card__chip showcase-card__chip--active">Chapter ${chapterNumber(idx)}</p>
@@ -99,7 +101,7 @@ function activeCardHtml(idx) {
         <a class="btn btn-primary showcase-card__cta" href="chapter.html?id=${c.id}">Mulai Baca →</a>
         <p class="showcase-card__count">${noteCounts[c.id] || 0} catatan</p>
         ${currentIsAdmin ? `
-          <div class="showcase-card__admin-row">
+          <div class="showcase-card__admin-row" data-admin-row>
             <button class="btn-icon btn" data-move-up="${c.id}" title="Naikkan urutan" ${idx === 0 ? "disabled" : ""}>↑</button>
             <button class="btn-icon btn" data-move-down="${c.id}" title="Turunkan urutan" ${idx === chapters.length - 1 ? "disabled" : ""}>↓</button>
             <button class="btn-icon btn" data-edit="${c.id}" title="Edit">✎</button>
@@ -127,8 +129,23 @@ function attachEvents() {
   });
 
   showcase.querySelectorAll(".showcase-card--side").forEach((card) => {
-    card.addEventListener("click", () => setActive(Number(card.dataset.idx)));
+    card.addEventListener("click", () => { if (!wasDragged) setActive(Number(card.dataset.idx)); });
   });
+
+  // Klik di mana saja pada kartu aktif (judul, deskripsi, gambar, area kosong)
+  // akan membuka chapter — kecuali area tombol admin (naik/turun/edit/hapus).
+  showcase.querySelectorAll(".showcase-card--active").forEach((card) => {
+    card.addEventListener("click", (e) => {
+      if (wasDragged) return;
+      if (e.target.closest("[data-admin-row]")) return;
+      if (e.target.closest(".showcase-card__cta")) return; // biarkan <a> bekerja normal
+      window.location.href = card.dataset.goto;
+    });
+  });
+
+  showcase.querySelectorAll("[data-admin-row]").forEach((row) =>
+    row.addEventListener("click", (e) => e.stopPropagation())
+  );
 
   showcase.querySelectorAll("[data-edit]").forEach((btn) =>
     btn.addEventListener("click", (e) => { e.stopPropagation(); handleEditChapter(btn.dataset.edit); })
@@ -142,6 +159,71 @@ function attachEvents() {
   showcase.querySelectorAll("[data-move-down]").forEach((btn) =>
     btn.addEventListener("click", (e) => { e.stopPropagation(); handleMove(btn.dataset.moveDown, 1); })
   );
+
+  attachDrag();
+}
+
+// ---------- Drag / swipe (mouse drag di desktop, swipe jari di mobile) ----------
+let wasDragged = false;
+
+function attachDrag() {
+  const viewport = document.getElementById("showcaseViewport");
+  const track = document.getElementById("showcaseTrack");
+  if (!viewport || !track) return;
+
+  let startX = 0;
+  let dragging = false;
+  let deltaX = 0;
+
+  const hasPrev = activeIndex > 0;
+  const hasNext = activeIndex < chapters.length - 1;
+
+  function onPointerDown(e) {
+    // Hanya tombol primer (klik kiri mouse), abaikan klik kanan / multi-touch
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    dragging = true;
+    wasDragged = false;
+    startX = e.clientX;
+    deltaX = 0;
+    track.classList.add("is-dragging");
+    track.setPointerCapture?.(e.pointerId);
+  }
+
+  function onPointerMove(e) {
+    if (!dragging) return;
+    deltaX = e.clientX - startX;
+
+    // Efek rubber-band kalau sudah di ujung kiri/kanan (chapter pertama/terakhir)
+    if ((!hasPrev && deltaX > 0) || (!hasNext && deltaX < 0)) {
+      deltaX *= 0.35;
+    }
+    if (Math.abs(deltaX) > 4) wasDragged = true;
+    track.style.transform = `translateX(${deltaX}px)`;
+  }
+
+  function onPointerUp() {
+    if (!dragging) return;
+    dragging = false;
+    track.classList.remove("is-dragging");
+
+    const THRESHOLD = 70;
+    if (deltaX <= -THRESHOLD && hasNext) {
+      setActive(activeIndex + 1);
+    } else if (deltaX >= THRESHOLD && hasPrev) {
+      setActive(activeIndex - 1);
+    } else {
+      track.style.transform = "translateX(0)";
+    }
+    // Biarkan event "click" berikutnya (yang menyusul pointerup) tahu bahwa
+    // ini adalah akhir dari drag, bukan klik biasa — lalu reset.
+    setTimeout(() => { wasDragged = false; }, 50);
+  }
+
+  track.addEventListener("pointerdown", onPointerDown);
+  track.addEventListener("pointermove", onPointerMove);
+  track.addEventListener("pointerup", onPointerUp);
+  track.addEventListener("pointercancel", onPointerUp);
+  track.addEventListener("pointerleave", (e) => { if (dragging) onPointerUp(); });
 }
 
 async function handleMove(id, dir) {

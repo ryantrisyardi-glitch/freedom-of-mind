@@ -113,27 +113,71 @@ Di dalam editor, ada dropdown di sebelah judul untuk memilih chapter — pilih c
 ### Menambah admin lain
 Sebagai superadmin, buka menu "kelola admin" di pojok kanan atas (muncul khusus untuk `ryan.trisyardi@gmail.com`), masukkan email Google orang yang ingin diberi akses, klik "+ Tambah admin".
 
+## Aplikasi sebagai PWA (bisa di-"install" seperti app native)
+
+Situs ini sudah dikonfigurasi sebagai **Progressive Web App**: pengunjung bisa menambahkannya ke home screen HP/desktop dan ikon yang muncul adalah ikon buku bertema (bukan ikon browser).
+
+- `manifest.webmanifest` — nama app, warna tema, dan daftar ikon.
+- `sw.js` — service worker yang menyimpan cache "app shell" (HTML/CSS/JS) supaya halaman tetap bisa dibuka meski koneksi lambat/putus. **Data (chapter, catatan, komentar) tetap selalu diambil langsung dari Firestore** — service worker ini tidak meng-cache data, jadi kontennya selalu yang paling baru.
+- `icons/` — ikon buku tertutup (dipakai sebagai ikon utama app) dan buku terbuka (dipakai untuk shortcut "Tulis catatan baru"). Gaya ikon: sketsa elegan garis tipis, senada dengan warna terracotta/sage di desain situs — bukan ikon 3D.
+
+Cara mencoba "install": buka situs lewat HTTPS (GitHub Pages otomatis HTTPS) di Chrome/Edge desktop atau Chrome/Safari di HP, lalu pilih "Install app" / "Add to Home Screen" dari menu browser.
+
+Kalau suatu saat ingin mengganti ikon, ganti saja file-file di folder `icons/` (ukuran dan nama file harus sama) — tidak perlu mengubah kode.
+
+## Gambar sampul chapter (biar "eye-catching" seperti showcase di homepage)
+
+Homepage sekarang menampilkan chapter sebagai **carousel** — satu chapter besar di tengah ("You are here") dengan ilustrasi sampul di sisi kanan, dan chapter sebelum/sesudahnya mengecil di kiri-kanan. Tampilan ini juga dipakai ulang sebagai banner di atas halaman `chapter.html`.
+
+Saat membuat/mengedit chapter, sekarang ada field tambahan:
+- **Tagline pendek** — kalimat singkat penggoda (seperti "Brace for Impact"), ditampilkan di bawah judul.
+- **Gambar sampul** — bisa diisi manual dengan URL Cloudinary, atau klik tombol **Upload** di sebelah field tersebut untuk mengunggah gambar langsung dari device (memakai konfigurasi Cloudinary yang sama seperti gambar di dalam catatan).
+
+Kalau gambar sampul belum diisi, akan otomatis dipakai ilustrasi garis tipis bawaan (motif kompas/gunung/ombak, bergiliran sesuai urutan chapter) agar tampilan tetap konsisten dan elegan.
+
+### Tips bikin gambar sampul bergaya "sketsa elegan" (bukan 3D)
+Supaya hasilnya konsisten dengan gaya situs (garis tipis, warna terracotta/sage/krem, terasa seperti ilustrasi buku tua), saat membuat gambar lewat AI image generator (Midjourney, DALL·E, dll) coba pakai kombinasi kata kunci seperti:
+- `fine line sketch illustration, single weight pen lines, vintage botanical/engraving style`
+- `muted earthy palette: warm terracotta, sage green, cream paper background`
+- `no shading gradients, no 3D render, flat minimal linework, like an old book illustration`
+- Tambahkan subjek sesuai tema chapter, misalnya: `a brain illustration`, `a compass with sparkle accents`, `mountains and a lake reflection`.
+
+Setelah gambar jadi, upload lewat tombol **Upload** di form chapter — selesai.
+
+## Cover paragraf di setiap catatan
+
+Paragraf pertama pada setiap catatan otomatis ditampilkan sedikit lebih besar dengan **huruf kapital drop-cap** di awal (seperti pembuka artikel majalah), supaya setiap catatan punya kesan pembuka yang lebih hidup. Tidak perlu setting apa pun — ini berlaku otomatis ke paragraf pertama yang kamu tulis di editor.
+
 ## Tentang posisi gambar (kiri/kanan/tengah/penuh)
 
 Saat menyisipkan gambar dan memilih "Kiri" atau "Kanan", gambar akan mengapit di sisi tersebut dan teks akan mengalir rapi di sebelahnya (seperti artikel majalah/koran) — termasuk di tampilan mobile, lebar gambar otomatis menyesuaikan agar teks di sampingnya tetap nyaman dibaca (bukan cuma satu kata per baris).
 
 Catatan: ini berbeda dari "drag bebas ke posisi mana saja" — gambar tetap mengikuti aliran teks di titik tempat kamu menyisipkannya, hanya posisi kiri/kanan/tengah/lebar yang bisa diatur. Pendekatan ini dipilih supaya tampilan tetap rapi dan stabil di semua ukuran layar, terutama mobile.
 
+## Cut / Copy / Paste saat blok teks di editor
+
+Saat kamu blok (seleksi) kata atau paragraf di dalam editor, akan muncul bubble kecil mengambang tepat di atas teks yang diblok, berisi tombol **Cut**, **Copy**, dan **Paste**. Ini sengaja dibuat karena klik-kanan di area editor sudah dipakai untuk membuka palet warna teks, sehingga menu klik-kanan bawaan browser (yang biasanya berisi cut/copy/paste) tidak muncul lagi di dalam editor — bubble ini menggantikan fungsi tersebut. Shortcut keyboard biasa (Ctrl/Cmd+C, X, V) tetap berfungsi seperti biasa.
+
 ## Struktur folder
 
 ```
-index.html        → halaman utama (grid semua chapter)
-chapter.html       → daftar catatan di dalam satu chapter
+index.html        → halaman utama (showcase carousel semua chapter)
+chapter.html       → daftar catatan di dalam satu chapter (dengan banner ilustrasi)
 note.html            → tampilan baca satu catatan + komentar
 editor.html            → editor tulis/edit catatan (khusus admin)
 admin.html               → kelola daftar admin (khusus superadmin)
+manifest.webmanifest      → konfigurasi PWA (nama, warna, ikon)
+sw.js                       → service worker (cache app shell untuk PWA)
+icons/                        → ikon buku (tertutup & terbuka) untuk PWA
 css/style.css              → semua gaya visual
 js/
   firebase-config.js         → EDIT INI: isi config Firebase & email superadmin
   firebase-core.js             → koneksi inti Firebase (jangan diedit)
   data.js                         → semua operasi baca/tulis Firestore (jangan diedit)
   ui-shared.js                      → navbar, modal (jangan diedit)
-  editor.js                           → logic toolbar editor & upload gambar (jangan diedit)
+  editor.js                           → logic toolbar editor, selection bubble, upload gambar (jangan diedit)
+  chapter-art.js                       → ilustrasi sketsa bawaan untuk sampul chapter (jangan diedit)
+  pwa-register.js                       → daftarkan service worker (jangan diedit)
   home-page.js, chapter-page.js,
   note-page.js, editor-page.js,
   admin-page.js                         → logic masing-masing halaman (jangan diedit)
@@ -141,10 +185,11 @@ js/
 
 ## Yang aman diedit kapan saja
 ✅ `js/firebase-config.js` (config & email superadmin)
-✅ Menulis/mengedit catatan lewat editor di browser (tidak menyentuh kode sama sekali)
+✅ Menulis/mengedit catatan, chapter (judul/tagline/gambar sampul) lewat antarmuka di browser (tidak menyentuh kode sama sekali)
+✅ Mengganti file-file di `icons/` kalau ingin ganti desain ikon PWA (ukuran & nama file harus sama)
 
 ## Yang sebaiknya tidak diubah manual
-⚠️ Semua file `.html` dan file di `css/`, `js/` (selain `firebase-config.js`) — ini adalah "mesin" aplikasinya.
+⚠️ Semua file `.html` dan file di `css/`, `js/` (selain `firebase-config.js`), serta `manifest.webmanifest` dan `sw.js` — ini adalah "mesin" aplikasinya.
 
 ## Biaya
 

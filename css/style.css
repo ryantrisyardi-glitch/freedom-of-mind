@@ -114,12 +114,26 @@ button{ font-family: inherit; }
   position: relative;
   padding: 6px 0 8px;
 }
+.chapter-showcase__viewport{
+  overflow: hidden;
+  touch-action: pan-y;
+}
 .chapter-showcase__track{
   display: flex;
   align-items: stretch;
   justify-content: center;
   gap: 22px;
   padding: 6px 4px 26px;
+  will-change: transform;
+  transition: transform .38s cubic-bezier(.22,.61,.36,1);
+  cursor: grab;
+}
+.chapter-showcase__track.is-dragging{
+  transition: none;
+  cursor: grabbing;
+}
+.chapter-showcase__track.is-dragging .showcase-card{
+  transition: none;
 }
 .showcase-card{
   position: relative;
@@ -129,6 +143,7 @@ button{ font-family: inherit; }
   box-shadow: 0 1px 0 var(--shadow);
   cursor: pointer;
   transition: transform .22s ease, box-shadow .22s ease, opacity .22s ease;
+  user-select: none;
 }
 .showcase-card--side{
   flex: 0 0 230px;
@@ -160,6 +175,11 @@ button{ font-family: inherit; }
   overflow: hidden;
   border-color: var(--terracotta-dim);
   box-shadow: 0 18px 40px var(--shadow);
+  animation: showcaseActiveIn .38s cubic-bezier(.22,.61,.36,1);
+}
+@keyframes showcaseActiveIn{
+  from{ opacity: 0; transform: scale(.96); }
+  to{ opacity: 1; transform: scale(1); }
 }
 .showcase-card__body{
   padding: 26px 28px;
@@ -453,7 +473,18 @@ button{ font-family: inherit; }
   float: none; width: 70%; margin: 10px auto 20px; clear: both;
 }
 .note-content figure.img-pos-full{
-  float: none; width: 100%; margin: 10px 0 22px; clear: both;
+  float: none; width: 100%; margin: 18px 0 26px; clear: both;
+}
+.note-content figure.img-pos-full img{
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 16px;
+  box-shadow: 0 14px 32px var(--shadow);
+}
+@media (max-width: 640px){
+  .note-content figure.img-pos-full img{ aspect-ratio: 4 / 3; }
 }
 
 @media (max-width: 640px){
@@ -559,7 +590,8 @@ button{ font-family: inherit; }
 .editor-area figure.img-pos-left{ float:left; width:42%; margin:0 18px 12px 0; }
 .editor-area figure.img-pos-right{ float:right; width:42%; margin:0 0 12px 18px; }
 .editor-area figure.img-pos-center{ float:none; width:65%; margin: 8px auto 16px; clear:both; }
-.editor-area figure.img-pos-full{ float:none; width:100%; margin: 8px 0 18px; clear:both; }
+.editor-area figure.img-pos-full{ float:none; width:100%; margin: 12px 0 18px; clear:both; }
+.editor-area figure.img-pos-full img{ aspect-ratio: 16/9; object-fit: cover; border-radius: 16px; }
 
 .img-controls{
   position:absolute; top:6px; right:6px;
