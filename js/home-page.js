@@ -128,21 +128,6 @@ function attachEvents() {
     dot.addEventListener("click", () => setActive(Number(dot.dataset.dot)));
   });
 
-  showcase.querySelectorAll(".showcase-card--side").forEach((card) => {
-    card.addEventListener("click", () => { if (!wasDragged) setActive(Number(card.dataset.idx)); });
-  });
-
-  // Klik di mana saja pada kartu aktif (judul, deskripsi, gambar, area kosong)
-  // akan membuka chapter — kecuali area tombol admin (naik/turun/edit/hapus).
-  showcase.querySelectorAll(".showcase-card--active").forEach((card) => {
-    card.addEventListener("click", (e) => {
-      if (wasDragged) return;
-      if (e.target.closest("[data-admin-row]")) return;
-      if (e.target.closest(".showcase-card__cta")) return; // biarkan <a> bekerja normal
-      window.location.href = card.dataset.goto;
-    });
-  });
-
   showcase.querySelectorAll("[data-admin-row]").forEach((row) =>
     row.addEventListener("click", (e) => e.stopPropagation())
   );
@@ -164,33 +149,26 @@ function attachEvents() {
 }
 
 // ---------- Drag / swipe (mouse drag di desktop, swipe jari di mobile) ----------
+// Navigasi "buka chapter" dilakukan langsung dari urutan pointerdown→pointerup,
+// BUKAN dari event "click" bawaan browser — supaya tidak tergantung pada
+// perilaku click yang kadang tidak konsisten saat dikombinasikan dengan
+// pointer capture/drag (ini yang sebelumnya bikin klik di PC kadang tidak jalan).
 let wasDragged = false;
 
 function attachDrag() {
-  const viewport = document.getElementById("showcaseViewport");
   const track = document.getElementById("showcaseTrack");
-  if (!viewport || !track) return;
+  if (!track) return;
   wasDragged = false;
 
   let startX = 0;
   let dragging = false;
   let deltaX = 0;
+  let downTarget = null;
 
   const hasPrev = activeIndex > 0;
   const hasNext = activeIndex < chapters.length - 1;
-
-  function onPointerDown(e) {
-    // Hanya tombol primer (klik kiri mouse), abaikan klik kanan / multi-touch
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    dragging = true;
-    startX = e.clientX;
-    deltaX = 0;
-    track.setPointerCapture?.(e.pointerId);
-  }
-
-  // Ambang batas supaya gerakan mouse super kecil saat klik biasa di PC
-  // tidak salah dianggap sebagai drag (yang akan membatalkan klik buka chapter).
-  const DRAG_THRESHOLD = 10;
+  const DRAG_THRESHOLD = 10; // px gerakan minimum supaya dianggap drag, bukan klik biasa
+  const SWIPE_THRESHOLD = 70; // px gerakan minimum supaya drag dianggap "ganti chapter"
 
   function onPointerMove(e) {
     if (!dragging) return;
@@ -213,27 +191,55 @@ function attachDrag() {
     if (!dragging) return;
     dragging = false;
     track.classList.remove("is-dragging");
+    document.removeEventListener("pointermove", onPointerMove);
+    document.removeEventListener("pointerup", onPointerUp);
+    document.removeEventListener("pointercancel", onPointerUp);
 
-    if (!wasDragged) return; // klik biasa, biarkan event "click" yang menangani navigasi
-
-    const THRESHOLD = 70;
-    if (deltaX <= -THRESHOLD && hasNext) {
-      setActive(activeIndex + 1);
-    } else if (deltaX >= THRESHOLD && hasPrev) {
-      setActive(activeIndex - 1);
+    if (wasDragged) {
+      if (deltaX <= -SWIPE_THRESHOLD && hasNext) {
+        setActive(activeIndex + 1);
+      } else if (deltaX >= SWIPE_THRESHOLD && hasPrev) {
+        setActive(activeIndex - 1);
+      } else {
+        track.style.transform = "translateX(0)";
+      }
+      setTimeout(() => { wasDragged = false; }, 50);
     } else {
-      track.style.transform = "translateX(0)";
+      // Tidak ada gerakan berarti = tap/klik biasa → langsung tangani navigasinya di sini.
+      handleTap(downTarget);
     }
-    // Biarkan event "click" berikutnya (yang menyusul pointerup setelah drag
-    // sungguhan) tahu untuk tidak memicu navigasi — lalu reset.
-    setTimeout(() => { wasDragged = false; }, 50);
+  }
+
+  function onPointerDown(e) {
+    // Hanya tombol primer (klik kiri mouse), abaikan klik kanan / multi-touch
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    dragging = true;
+    startX = e.clientX;
+    deltaX = 0;
+    downTarget = e.target;
+    // Dengarkan di document (bukan setPointerCapture) supaya tidak mengganggu
+    // event click/native browser pada anak elemen (tombol, link) di dalam kartu.
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("pointercancel", onPointerUp);
   }
 
   track.addEventListener("pointerdown", onPointerDown);
-  track.addEventListener("pointermove", onPointerMove);
-  track.addEventListener("pointerup", onPointerUp);
-  track.addEventListener("pointercancel", onPointerUp);
-  track.addEventListener("pointerleave", (e) => { if (dragging) onPointerUp(); });
+}
+
+function handleTap(target) {
+  if (!target) return;
+  if (target.closest("[data-admin-row]")) return; // sudah ditangani tombol admin masing-masing
+
+  const activeCard = target.closest(".showcase-card--active");
+  if (activeCard) {
+    window.location.href = activeCard.dataset.goto;
+    return;
+  }
+  const sideCard = target.closest(".showcase-card--side");
+  if (sideCard) {
+    setActive(Number(sideCard.dataset.idx));
+  }
 }
 
 async function handleMove(id, dir) {
