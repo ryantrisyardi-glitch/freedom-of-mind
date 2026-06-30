@@ -1,160 +1,237 @@
 // =========================================================
-// HOME PAGE — grid chapter, tombol tambah chapter (admin only)
+// HOME PAGE — showcase chapter ala carousel "you are here"
 // =========================================================
 
 import { initApp, onAuthReady, currentIsAdmin, showModal, showChoice } from "./ui-shared.js";
-import { getAllChapters, createChapter, updateChapter, deleteChapter, getAllNotes, QUICK_NOTES_NAME } from "./data.js";
+import { getAllChapters, createChapter, updateChapter, deleteChapter, getAllNotes, QUICK_NOTES_NAME, uploadToCloudinary } from "./data.js";
+import { defaultChapterArt } from "./chapter-art.js";
 
 let chapters = [];
 let noteCounts = {};
+let activeIndex = 0;
 
 async function loadAndRender() {
-  const grid = document.getElementById("chapterGrid");
+  const showcase = document.getElementById("chapterShowcase");
   try {
     const [chapterList, allNotes] = await Promise.all([getAllChapters(), getAllNotes()]);
     chapters = chapterList;
     noteCounts = {};
     allNotes.forEach((n) => { noteCounts[n.chapterId] = (noteCounts[n.chapterId] || 0) + 1; });
   } catch (err) {
-    grid.innerHTML = `<div class="empty-state">Gagal memuat. Pastikan Firebase sudah dikonfigurasi (lihat README.md). ${err.message || ""}</div>`;
+    showcase.innerHTML = `<div class="empty-state">Gagal memuat. Pastikan Firebase sudah dikonfigurasi (lihat README.md). ${err.message || ""}</div>`;
     return;
   }
+  if (activeIndex >= chapters.length) activeIndex = Math.max(0, chapters.length - 1);
   render();
 }
-
-function render() {
-  const grid = document.getElementById("chapterGrid");
-
-  if (chapters.length === 0) {
-    grid.innerHTML = currentIsAdmin
-      ? `<div class="empty-state">Belum ada bagian (chapter). Klik tombol di bawah untuk membuat yang pertama.</div>`
-      : `<div class="empty-state">Belum ada catatan yang dipublikasikan.</div>`;
-  } else {
-    grid.innerHTML = chapters.map((c) => `
-      <article class="chapter-card is-clickable" data-id="${c.id}" data-href="chapter.html?id=${c.id}">
-        ${currentIsAdmin ? `<span class="sortable-drag-handle" draggable="false" title="Seret untuk urutkan">⠿</span>` : ""}
-        <div class="chapter-card__count">${noteCounts[c.id] || 0} catatan</div>
-        <h2><a href="chapter.html?id=${c.id}" class="card-link">${escapeHtml(c.judul)}</a></h2>
-        <p>${escapeHtml(c.deskripsi || "")}</p>
-        ${currentIsAdmin ? `
-          <div class="chapter-card__admin-row">
-            <button class="btn-icon btn" data-edit="${c.id}" title="Edit">✎</button>
-            <button class="btn-icon btn-danger btn" data-del="${c.id}" title="Hapus">🗑</button>
-          </div>` : ""}
-      </article>
-    `).join("");
-  }
-
-  if (currentIsAdmin) {
-    grid.innerHTML += `<button class="add-chapter-card" id="addChapterBtn">+ Chapter baru</button>`;
-  }
-
-  document.getElementById("addChapterBtn")?.addEventListener("click", handleAddChapter);
-  grid.querySelectorAll("[data-edit]").forEach((btn) =>
-    btn.addEventListener("click", (e) => { e.stopPropagation(); handleEditChapter(btn.dataset.edit); })
-  );
-  grid.querySelectorAll("[data-del]").forEach((btn) =>
-    btn.addEventListener("click", (e) => { e.stopPropagation(); handleDeleteChapter(btn.dataset.del); })
-  );
-
-  // Klik pada card untuk navigasi (fix #3)
-  grid.querySelectorAll(".chapter-card.is-clickable").forEach((card) => {
-    card.addEventListener("click", (e) => {
-      if (e.target.closest("button") || e.target.closest("a") || e.target.closest(".sortable-drag-handle")) return;
-      location.href = card.dataset.href;
-    });
-  });
-
-  // Drag & drop sort (admin only, fix #2)
-  if (currentIsAdmin) {
-    initChapterDragSort(grid);
-  }
-}
-
-function initChapterDragSort(grid) {
-  let dragSrc = null;
-
-  grid.querySelectorAll(".chapter-card").forEach((card) => {
-    card.setAttribute("draggable", "true");
-
-    card.addEventListener("dragstart", (e) => {
-      dragSrc = card;
-      card.classList.add("dragging");
-      e.dataTransfer.effectAllowed = "move";
-    });
-
-    card.addEventListener("dragend", () => {
-      card.classList.remove("dragging");
-      grid.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
-      dragSrc = null;
-    });
-
-    card.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      if (card !== dragSrc) {
-        grid.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
-        card.classList.add("drag-over");
-      }
-    });
-
-    card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
-
-    card.addEventListener("drop", async (e) => {
-      e.preventDefault();
-      card.classList.remove("drag-over");
-      if (!dragSrc || dragSrc === card) return;
-
-      // Reorder in DOM
-      const cards = [...grid.querySelectorAll(".chapter-card")];
-      const srcIdx = cards.indexOf(dragSrc);
-      const dstIdx = cards.indexOf(card);
-      if (srcIdx < dstIdx) card.after(dragSrc); else card.before(dragSrc);
-
-      // Rebuild order array and persist
-      const newOrder = [...grid.querySelectorAll(".chapter-card")].map((c) => c.dataset.id);
-      await saveChapterOrder(newOrder);
-    });
-  });
-}
-
-async function saveChapterOrder(orderedIds) {
-  await Promise.all(
-    orderedIds.map((id, idx) => updateChapter(id, { urutan: idx + 1 }))
-  );
-  // Update local chapters array order
-  chapters.sort((a, b) => orderedIds.indexOf(a.id) - orderedIds.indexOf(b.id));
-}
-
 
 function escapeHtml(str) {
   return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function chapterNumber(idx) { return String(idx + 1).padStart(2, "0"); }
+
+function render() {
+  const showcase = document.getElementById("chapterShowcase");
+
+  if (chapters.length === 0) {
+    showcase.innerHTML = currentIsAdmin
+      ? `<div class="empty-state">Belum ada bagian (chapter). Klik tombol di bawah untuk membuat yang pertama.</div>`
+      : `<div class="empty-state">Belum ada catatan yang dipublikasikan.</div>`;
+    renderAddButton();
+    return;
+  }
+
+  const prevIdx = activeIndex - 1;
+  const nextIdx = activeIndex + 1;
+
+  showcase.innerHTML = `
+    <div class="chapter-showcase__track" id="showcaseTrack">
+      ${prevIdx >= 0 ? sideCardHtml(prevIdx) : ""}
+      ${activeCardHtml(activeIndex)}
+      ${nextIdx < chapters.length ? sideCardHtml(nextIdx) : ""}
+    </div>
+    <button class="showcase-nav showcase-nav--prev" id="navPrev" aria-label="Sebelumnya" ${activeIndex === 0 ? "disabled" : ""}>‹</button>
+    <button class="showcase-nav showcase-nav--next" id="navNext" aria-label="Berikutnya" ${activeIndex === chapters.length - 1 ? "disabled" : ""}>›</button>
+    <div class="showcase-dots" id="showcaseDots">
+      ${chapters.map((_, i) => `<button class="showcase-dots__dot ${i === activeIndex ? "is-active" : ""}" data-dot="${i}" aria-label="Chapter ${i + 1}"></button>`).join("")}
+    </div>
+  `;
+
+  renderAddButton();
+  attachEvents();
+}
+
+function renderAddButton() {
+  const showcase = document.getElementById("chapterShowcase");
+  document.getElementById("addChapterBtnWrap")?.remove();
+  if (!currentIsAdmin) return;
+  const wrap = document.createElement("div");
+  wrap.id = "addChapterBtnWrap";
+  wrap.innerHTML = `<button class="add-chapter-card" id="addChapterBtn">+ Chapter baru</button>`;
+  showcase.after(wrap);
+  document.getElementById("addChapterBtn").addEventListener("click", handleAddChapter);
+}
+
+function sideCardHtml(idx) {
+  const c = chapters[idx];
+  return `
+    <article class="showcase-card showcase-card--side" data-idx="${idx}">
+      <p class="showcase-card__chip">Chapter ${chapterNumber(idx)}</p>
+      <h3>${escapeHtml(c.judul)}</h3>
+      <p class="showcase-card__hint">${escapeHtml(c.tagline || c.deskripsi || "")}</p>
+      <span class="showcase-card__arrow">→</span>
+    </article>
+  `;
+}
+
+function activeCardHtml(idx) {
+  const c = chapters[idx];
+  const artBg = c.gambar ? ` style="background-image:url('${c.gambar.replace(/'/g, "")}')"` : "";
+  const art = c.gambar ? "" : defaultChapterArt(idx);
+  return `
+    <article class="showcase-card showcase-card--active" data-idx="${idx}">
+      <div class="showcase-card__body">
+        <span class="showcase-card__badge">You are here</span>
+        <p class="showcase-card__chip showcase-card__chip--active">Chapter ${chapterNumber(idx)}</p>
+        <h2>${escapeHtml(c.judul)}</h2>
+        <p class="showcase-card__tagline">${escapeHtml(c.tagline || c.deskripsi || "")}</p>
+        <a class="btn btn-primary showcase-card__cta" href="chapter.html?id=${c.id}">Mulai Baca →</a>
+        <p class="showcase-card__count">${noteCounts[c.id] || 0} catatan</p>
+        ${currentIsAdmin ? `
+          <div class="showcase-card__admin-row">
+            <button class="btn-icon btn" data-move-up="${c.id}" title="Naikkan urutan" ${idx === 0 ? "disabled" : ""}>↑</button>
+            <button class="btn-icon btn" data-move-down="${c.id}" title="Turunkan urutan" ${idx === chapters.length - 1 ? "disabled" : ""}>↓</button>
+            <button class="btn-icon btn" data-edit="${c.id}" title="Edit">✎</button>
+            <button class="btn-icon btn-danger btn" data-del="${c.id}" title="Hapus">🗑</button>
+          </div>` : ""}
+      </div>
+      <div class="showcase-card__art"${artBg}>${art}</div>
+    </article>
+  `;
+}
+
+function setActive(idx) {
+  activeIndex = Math.max(0, Math.min(chapters.length - 1, idx));
+  render();
+}
+
+function attachEvents() {
+  const showcase = document.getElementById("chapterShowcase");
+
+  document.getElementById("navPrev")?.addEventListener("click", () => setActive(activeIndex - 1));
+  document.getElementById("navNext")?.addEventListener("click", () => setActive(activeIndex + 1));
+
+  showcase.querySelectorAll("[data-dot]").forEach((dot) => {
+    dot.addEventListener("click", () => setActive(Number(dot.dataset.dot)));
+  });
+
+  showcase.querySelectorAll(".showcase-card--side").forEach((card) => {
+    card.addEventListener("click", () => setActive(Number(card.dataset.idx)));
+  });
+
+  showcase.querySelectorAll("[data-edit]").forEach((btn) =>
+    btn.addEventListener("click", (e) => { e.stopPropagation(); handleEditChapter(btn.dataset.edit); })
+  );
+  showcase.querySelectorAll("[data-del]").forEach((btn) =>
+    btn.addEventListener("click", (e) => { e.stopPropagation(); handleDeleteChapter(btn.dataset.del); })
+  );
+  showcase.querySelectorAll("[data-move-up]").forEach((btn) =>
+    btn.addEventListener("click", (e) => { e.stopPropagation(); handleMove(btn.dataset.moveUp, -1); })
+  );
+  showcase.querySelectorAll("[data-move-down]").forEach((btn) =>
+    btn.addEventListener("click", (e) => { e.stopPropagation(); handleMove(btn.dataset.moveDown, 1); })
+  );
+}
+
+async function handleMove(id, dir) {
+  const idx = chapters.findIndex((c) => c.id === id);
+  const swapIdx = idx + dir;
+  if (idx < 0 || swapIdx < 0 || swapIdx >= chapters.length) return;
+
+  [chapters[idx], chapters[swapIdx]] = [chapters[swapIdx], chapters[idx]];
+  activeIndex = swapIdx;
+  render();
+
+  await Promise.all(chapters.map((c, i) => updateChapter(c.id, { urutan: i + 1 })));
+}
+
+// ---------- Form chapter: judul, deskripsi, tagline, gambar sampul ----------
+
+/** Tambahkan tombol "Upload" di samping field gambar pada modal yang sedang terbuka. */
+function enhanceCoverImageField() {
+  const overlay = [...document.querySelectorAll(".modal-overlay")].pop();
+  const input = overlay?.querySelector('input[name="gambar"]');
+  if (!input) return;
+
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "display:flex; gap:8px; align-items:center; margin-bottom:10px;";
+  input.style.marginBottom = "0";
+  input.before(wrap);
+  wrap.appendChild(input);
+
+  const uploadBtn = document.createElement("button");
+  uploadBtn.type = "button";
+  uploadBtn.className = "btn";
+  uploadBtn.style.flexShrink = "0";
+  uploadBtn.textContent = "Upload";
+  wrap.appendChild(uploadBtn);
+
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = "image/*";
+  fileInput.style.display = "none";
+  wrap.appendChild(fileInput);
+
+  uploadBtn.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = "Mengunggah…";
+    try {
+      input.value = await uploadToCloudinary(file);
+    } catch (err) {
+      alert("Gagal upload: " + err.message);
+    } finally {
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = "Upload";
+    }
+  });
+}
+
+function chapterFields(chapter) {
+  return [
+    { key: "judul", label: "Judul", placeholder: "Misal: Freedom of Mind", value: chapter?.judul },
+    { key: "tagline", label: "Tagline pendek", placeholder: "Misal: Brace for Impact", value: chapter?.tagline },
+    { key: "deskripsi", label: "Deskripsi", placeholder: "Deskripsi singkat (opsional)", multiline: true, value: chapter?.deskripsi },
+    { key: "gambar", label: "Gambar sampul", placeholder: "URL Cloudinary, atau klik Upload →", value: chapter?.gambar },
+  ];
+}
+
 async function handleAddChapter() {
-  const result = await showModal({
+  const pending = showModal({
     title: "Chapter baru",
-    fields: [
-      { key: "judul", label: "Judul", placeholder: "Misal: Freedom of Mind" },
-      { key: "deskripsi", label: "Deskripsi", placeholder: "Deskripsi singkat (opsional)", multiline: true },
-    ],
+    fields: chapterFields(null),
     confirmLabel: "Buat chapter",
   });
+  enhanceCoverImageField();
+  const result = await pending;
   if (!result || !result.judul) return;
   await createChapter(result);
+  activeIndex = chapters.length; // arahkan ke chapter baru
   await loadAndRender();
 }
 
 async function handleEditChapter(id) {
   const chapter = chapters.find((c) => c.id === id);
-  const result = await showModal({
+  const pending = showModal({
     title: "Edit chapter",
-    fields: [
-      { key: "judul", label: "Judul", value: chapter.judul },
-      { key: "deskripsi", label: "Deskripsi", value: chapter.deskripsi, multiline: true },
-    ],
+    fields: chapterFields(chapter),
     confirmLabel: "Simpan perubahan",
   });
+  enhanceCoverImageField();
+  const result = await pending;
   if (!result || !result.judul) return;
   await updateChapter(id, result);
   await loadAndRender();

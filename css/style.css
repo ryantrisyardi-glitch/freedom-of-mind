@@ -109,42 +109,140 @@ button{ font-family: inherit; }
 }
 .masthead__desc{ color: var(--ink-soft); max-width: 560px; margin: 0 0 28px; }
 
-/* ---------- Chapter grid ---------- */
-.chapter-grid{
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 18px;
-  padding-bottom: 60px;
+/* ---------- Chapter showcase (carousel ala "you are here") ---------- */
+.chapter-showcase{
+  position: relative;
+  padding: 6px 0 8px;
 }
-.chapter-card{
+.chapter-showcase__track{
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 22px;
+  padding: 6px 4px 26px;
+}
+.showcase-card{
   position: relative;
   background: var(--paper-card);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 24px 22px;
+  border-radius: 18px;
   box-shadow: 0 1px 0 var(--shadow);
-  transition: transform .18s ease, box-shadow .18s ease;
+  cursor: pointer;
+  transition: transform .22s ease, box-shadow .22s ease, opacity .22s ease;
 }
-.chapter-card:hover{ transform: translateY(-3px); box-shadow: 0 14px 26px var(--shadow); }
-.chapter-card__count{
-  font-family: var(--font-mono); font-size: 11px; color: var(--sage);
-  margin-bottom: 8px;
+.showcase-card--side{
+  flex: 0 0 230px;
+  padding: 22px 20px;
+  opacity: .82;
 }
-.chapter-card h2{
-  font-family: var(--font-display); font-weight:600; font-size: 1.4rem; margin: 0 0 8px;
+.showcase-card--side:hover{ opacity: 1; transform: translateY(-3px); box-shadow: 0 14px 26px var(--shadow); }
+.showcase-card__chip{
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--sage); margin: 0 0 10px;
 }
-.chapter-card h2 a{ color: var(--ink); }
-.chapter-card h2 a:hover{ color: var(--terracotta); text-decoration:none; }
-.chapter-card p{ color: var(--ink-soft); font-size: 0.93rem; margin: 0; }
-.chapter-card__admin-row{
-  display:flex; gap:8px; margin-top:14px; padding-top:14px; border-top: 1px dashed var(--line);
+.showcase-card--side h3{
+  font-family: var(--font-display); font-weight: 600; font-size: 1.32rem;
+  margin: 0 0 10px; color: var(--ink);
+}
+.showcase-card__hint{ color: var(--ink-soft); font-size: .9rem; margin: 0; }
+.showcase-card__arrow{
+  position: absolute; right: 18px; bottom: 18px;
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid var(--line); display: flex; align-items: center; justify-content: center;
+  color: var(--ink); font-size: 1rem;
+}
+
+.showcase-card--active{
+  flex: 0 0 min(680px, 100%);
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  align-items: stretch;
+  overflow: hidden;
+  border-color: var(--terracotta-dim);
+  box-shadow: 0 18px 40px var(--shadow);
+}
+.showcase-card__body{
+  padding: 26px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.showcase-card__badge{
+  display: inline-block;
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em; font-weight: 600;
+  text-transform: uppercase; color: var(--paper);
+  background: var(--terracotta); border-radius: 999px; padding: 5px 12px; margin-bottom: 14px;
+}
+.showcase-card__chip--active{ color: var(--terracotta); margin-bottom: 8px; }
+.showcase-card--active h2{
+  font-family: var(--font-display); font-weight: 700; font-size: 1.85rem; line-height: 1.12;
+  margin: 0 0 8px; color: var(--ink);
+}
+.showcase-card__tagline{ color: var(--ink-soft); font-size: .95rem; margin: 0 0 20px; }
+.showcase-card__cta{
+  margin-top: auto;
+  display: inline-flex; align-items: center; gap: 8px;
+  border-radius: 999px; padding: 11px 20px;
+}
+.showcase-card__count{
+  font-family: var(--font-mono); font-size: 11px; color: var(--sage); margin-top: 12px;
+}
+.showcase-card__admin-row{
+  display: flex; gap: 8px; margin-top: 14px;
+}
+
+.showcase-card__art{
+  position: relative;
+  background: linear-gradient(160deg, var(--paper-dim), var(--paper));
+  background-size: cover;
+  background-position: center;
+  min-height: 220px;
+  overflow: hidden;
+}
+.showcase-card__art svg{ position: absolute; inset: 0; width: 100%; height: 100%; }
+.showcase-card__art::before,
+.showcase-card__art::after{
+  content: "+"; position: absolute; color: var(--terracotta); font-size: 13px;
+  font-family: var(--font-mono); opacity: .55;
+}
+.showcase-card__art::before{ top: 18%; left: 14%; }
+.showcase-card__art::after{ bottom: 20%; left: 18%; font-size: 17px; }
+
+.showcase-nav{
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--paper-card);
+  color: var(--ink); font-size: 1.1rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 10px var(--shadow);
+  z-index: 5;
+}
+.showcase-nav:hover{ border-color: var(--terracotta-dim); }
+.showcase-nav--prev{ left: -6px; }
+.showcase-nav--next{ right: -6px; }
+.showcase-nav:disabled{ opacity: .35; cursor: default; }
+
+.showcase-dots{
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin: 0 0 18px;
+}
+.showcase-dots__dot{
+  width: 9px; height: 9px; border-radius: 50%; border: none; padding: 0;
+  background: var(--line); cursor: pointer;
+}
+.showcase-dots__dot.is-active{ background: var(--terracotta); width: 11px; height: 11px; }
+
+.chapter-showcase__admin-edit{
+  position: absolute; top: 14px; right: 14px; display: flex; gap: 6px; z-index: 3;
 }
 
 .add-chapter-card{
   display:flex; align-items:center; justify-content:center;
   border: 1.5px dashed var(--terracotta-dim);
   border-radius: 14px;
-  min-height: 120px;
+  min-height: 56px;
+  margin: 4px auto 60px;
+  max-width: 280px;
   color: var(--terracotta);
   font-family: var(--font-mono);
   font-size: 0.9rem;
@@ -152,6 +250,14 @@ button{ font-family: inherit; }
   background: transparent;
 }
 .add-chapter-card:hover{ background: rgba(200,118,58,0.06); }
+
+@media (max-width: 880px){
+  .showcase-card--side{ display: none; }
+  .showcase-card--active{ grid-template-columns: 1fr; flex-basis: 100%; }
+  .showcase-card__art{ min-height: 180px; order: -1; }
+  .showcase-nav--prev{ left: 6px; }
+  .showcase-nav--next{ right: 6px; }
+}
 
 /* ---------- Notes list (inside a chapter) ---------- */
 .breadcrumb{
@@ -164,6 +270,36 @@ button{ font-family: inherit; }
   font-size: clamp(1.9rem, 4.5vw, 2.8rem); margin: 4px 0 10px;
 }
 .chapter-header p{ color: var(--ink-soft); max-width: 600px; }
+
+.chapter-header--banner{
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  align-items: stretch;
+  background: var(--paper-card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 1px 0 var(--shadow);
+}
+.chapter-header--banner .chapter-header__body{ padding: 26px 28px; }
+.chapter-header--banner .chapter-header__chip{
+  font-family: var(--font-mono); font-size: 11px; letter-spacing:.08em; text-transform: uppercase;
+  color: var(--terracotta); margin: 0 0 8px;
+}
+.chapter-header--banner h1{ margin: 0 0 8px; }
+.chapter-header--banner p{ margin: 0; }
+.chapter-header__art{
+  position: relative;
+  background: linear-gradient(160deg, var(--paper-dim), var(--paper));
+  background-size: cover; background-position: center;
+  min-height: 150px;
+}
+.chapter-header__art svg{ position:absolute; inset:0; width:100%; height:100%; }
+
+@media (max-width: 700px){
+  .chapter-header--banner{ grid-template-columns: 1fr; }
+  .chapter-header__art{ order: -1; min-height: 130px; }
+}
 
 .note-list{ display:grid; gap: 14px; padding-bottom: 60px; }
 .note-row{
@@ -270,6 +406,23 @@ button{ font-family: inherit; }
 .note-content{ font-size: 1.08rem; line-height: 1.85; }
 .note-content::after{ content:""; display:block; clear: both; }
 .note-content p{ margin: 0 0 1.3em; }
+
+/* Paragraf pembuka ("cover paragraf") — drop cap + ukuran sedikit lebih besar,
+   supaya setiap catatan punya pembuka yang terasa istimewa, seperti di majalah. */
+.note-content > p:first-of-type{
+  font-size: 1.12em;
+  color: var(--ink);
+}
+.note-content > p:first-of-type::first-letter{
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 3.4em;
+  line-height: 0.82;
+  float: left;
+  padding: 0.04em 0.09em 0 0;
+  color: var(--terracotta);
+}
+
 .note-content h2{ font-family: var(--font-display); font-size:1.5rem; margin: 1.4em 0 .6em; clear: both; }
 .note-content h3{ font-family: var(--font-display); font-size:1.2rem; margin: 1.2em 0 .5em; clear: both; }
 .note-content blockquote{
@@ -650,6 +803,53 @@ button{ font-family: inherit; }
 .floating-toolbar button[data-fcmd]:disabled { opacity: 0.32; cursor: not-allowed; }
 .floating-toolbar__sep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; flex-shrink: 0; }
 
+/* ---------- Selection bubble (cut / copy / paste saat blok teks) ---------- */
+.selection-bubble {
+  position: fixed;
+  z-index: 400;
+  display: flex;
+  gap: 2px;
+  background: var(--paper-card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08);
+  padding: 5px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 6px);
+  transition: opacity 0.15s, transform 0.15s;
+}
+.selection-bubble.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0);
+}
+.selection-bubble button {
+  background: none;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.selection-bubble button:hover { background: rgba(0,0,0,0.06); }
+.selection-bubble button:active { background: var(--terracotta-dim); }
+.selection-bubble__sep { width: 1px; background: var(--line); margin: 2px 1px; flex-shrink: 0; }
+.selection-bubble::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--paper-card);
+}
+
 /* Highlight button — coloured underline shows active color */
 .btn-highlight {
   position: relative;
@@ -912,17 +1112,7 @@ button{ font-family: inherit; }
 .dragging { opacity: 0.4; }
 .drag-over { outline: 2px dashed var(--terracotta); outline-offset: 2px; border-radius: 10px; }
 
-/* chapter-card drag handle */
-.chapter-card .sortable-drag-handle {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  font-size: 14px;
-}
-.chapter-card { position: relative; }
-
 /* ---------- Clickable card/row (fix #3) ---------- */
-.chapter-card.is-clickable { cursor: pointer; }
 .note-row.is-clickable { cursor: pointer; }
 
 @media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important; } }

@@ -4,6 +4,7 @@
 
 import { initApp, onAuthReady, currentIsAdmin, showModal, showConfirm } from "./ui-shared.js";
 import { getChapter, getNotesByChapter, getNotesByChapterForAdmin, createNote, deleteNote, updateNote, uploadToCloudinary } from "./data.js";
+import { defaultChapterArt } from "./chapter-art.js";
 
 function getChapterId() {
   return new URLSearchParams(location.search).get("id");
@@ -46,9 +47,19 @@ async function loadAndRender() {
 }
 
 function render() {
+  const artIdx = (chapter.urutan || 1) - 1;
+  const artBg = chapter.gambar ? ` style="background-image:url('${chapter.gambar.replace(/'/g, "")}')"` : "";
+  const art = chapter.gambar ? "" : defaultChapterArt(artIdx);
+
   document.getElementById("chapterHeader").innerHTML = `
-    <h1>${escapeHtml(chapter.judul)}</h1>
-    <p>${escapeHtml(chapter.deskripsi || "")}</p>
+    <div class="chapter-header--banner">
+      <div class="chapter-header__body">
+        <p class="chapter-header__chip">Chapter ${String(chapter.urutan || 1).padStart(2, "0")}</p>
+        <h1>${escapeHtml(chapter.judul)}</h1>
+        <p>${escapeHtml(chapter.tagline || chapter.deskripsi || "")}</p>
+      </div>
+      <div class="chapter-header__art"${artBg}>${art}</div>
+    </div>
   `;
 
   document.getElementById("addNoteBar").innerHTML = currentIsAdmin

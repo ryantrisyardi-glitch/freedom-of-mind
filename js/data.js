@@ -1,7 +1,7 @@
 // =========================================================
 // DATA LAYER — semua operasi baca/tulis ke Firestore
 // Koleksi:
-//   chapters: { id, judul, deskripsi, urutan, createdAt, deletedAt }
+//   chapters: { id, judul, deskripsi, gambar, tagline, urutan, createdAt, deletedAt }
 //   notes:    { id, chapterId, judul, contentHtml, tag[], urutan, createdAt, updatedAt, deletedAt }
 //   comments: { id, noteId, uid, name, photoURL, text, createdAt }
 //   admins:   { id = email, addedBy, addedAt }
@@ -54,12 +54,14 @@ export async function getChapter(chapterId) {
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
-export async function createChapter({ judul, deskripsi }) {
+export async function createChapter({ judul, deskripsi, gambar, tagline }) {
   const all = await getAllChapters();
   const maxUrutan = all.reduce((m, c) => Math.max(m, c.urutan || 0), 0);
   return addDoc(collection(db, "chapters"), {
     judul,
     deskripsi: deskripsi || "",
+    gambar: gambar || "",
+    tagline: tagline || "",
     urutan: maxUrutan + 1,
     createdAt: serverTimestamp(),
     deletedAt: null,

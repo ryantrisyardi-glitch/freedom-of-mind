@@ -6,6 +6,8 @@
 // Floating toolbar: semua tombol, collapsible dengan ^/v toggle.
 // =========================================================
 
+import { uploadToCloudinary } from "./data.js";
+
 let editorEl = null;
 let onChangeCallback = null;
 
@@ -638,25 +640,7 @@ function buildImageFigure(url, position) {
 }
 
 async function handleImageUpload(file) {
-  const cfg = window.CLOUDINARY_CONFIG;
-  if (!cfg || cfg.cloudName === "GANTI_CLOUD_NAME") {
-    alert("Penyimpanan gambar belum aktif — konfigurasi Cloudinary di js/firebase-config.js terlebih dahulu (lihat README.md).");
-    return null;
-  }
-  if (file.size > 8 * 1024 * 1024) {
-    alert("Ukuran gambar maksimal 8 MB.");
-    return null;
-  }
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("upload_preset", cfg.uploadPreset);
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${cfg.cloudName}/image/upload`, {
-    method: "POST",
-    body: formData,
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || "Upload ke Cloudinary gagal");
-  return data.secure_url;
+  return uploadToCloudinary(file);
 }
 
 async function insertImage(position) {
@@ -915,6 +899,128 @@ function positionFloatingToolbarAboveKeyboard() {
   }
 }
 
+// ---------- Selection bubble (Cut / Copy / Paste saat teks diblok) ----------
+// Muncul mengambang di atas teks yang sedang diseleksi. Diperlukan karena
+// klik-kanan di area editor sudah dipakai untuk membuka color palette
+// (lihat setupEditorContextMenu), sehingga menu cut/copy/paste bawaan
+// browser tidak muncul lagi di dalam editor.
+
+let selectionBubbleEl = null;
+let bubbleRange = null;
+
+function saveBubbleSelection() {
+  const sel = window.getSelection();
+  if (sel.rangeCount) bubbleRange = sel.getRangeAt(0).cloneRange();
+}
+
+function restoreBubbleSelection() {
+  if (!bubbleRange) return;
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(bubbleRange);
+}
+
+function createSelectionBubble() {
+  const el = document.createElement("div");
+  el.className = "selection-bubble";
+  el.id = "selectionBubble";
+  el.innerHTML = `
+    <button type="button" data-bubble="cut" title="Potong">✂ Cut</button>
+    <span class="selection-bubble__sep"></span>
+    <button type="button" data-bubble="copy" title="Salin">⧉ Copy</button>
+    <span class="selection-bubble__sep"></span>
+    <button type="button" data-bubble="paste" title="Tempel">📋 Paste</button>
+  `;
+  document.body.appendChild(el);
+
+  el.querySelectorAll("button[data-bubble]").forEach((btn) => {
+    // mousedown di-preventDefault supaya seleksi/fokus editor tidak hilang
+    // sebelum aksi cut/copy/paste sempat dijalankan.
+    btn.addEventListener("mousedown", (e) => e.preventDefault());
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      handleBubbleAction(btn.dataset.bubble);
+    });
+  });
+
+  return el;
+}
+
+async function handleBubbleAction(action) {
+  editorEl.focus();
+  restoreBubbleSelection();
+
+  if (action === "copy") {
+    const text = window.getSelection().toString();
+    try { document.execCommand("copy"); } catch { /* lanjut ke fallback */ }
+    if (text && navigator.clipboard?.writeText) {
+      try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
+    }
+  } else if (action === "cut") {
+    const text = window.getSelection().toString();
+    try { document.execCommand("cut"); } catch { /* lanjut ke fallback */ }
+    if (text && navigator.clipboard?.writeText) {
+      try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
+    }
+    normalizeEmptyState();
+    scheduleHistoryPush();
+    triggerChange();
+  } else if (action === "paste") {
+    let pasted = false;
+    if (navigator.clipboard?.readText) {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          document.execCommand("insertText", false, text);
+          pasted = true;
+        }
+      } catch { /* izin clipboard ditolak browser — coba fallback di bawah */ }
+    }
+    if (!pasted) {
+      try { pasted = document.execCommand("paste"); } catch { /* ignore */ }
+    }
+    if (!pasted) {
+      alert("Browser ini membatasi tombol Paste lewat JavaScript. Gunakan Ctrl+V (Cmd+V di Mac) untuk menempel.");
+    }
+    scheduleHistoryPush();
+    triggerChange();
+  }
+
+  hideSelectionBubble();
+  updateToolbarState();
+  updateFloatingToolbarState();
+}
+
+function positionSelectionBubble() {
+  if (!selectionBubbleEl) return;
+  const sel = window.getSelection();
+  if (!sel.rangeCount) { hideSelectionBubble(); return; }
+
+  const range = sel.getRangeAt(0);
+  const text = sel.toString();
+  const insideEditor = editorEl && editorEl.contains(range.startContainer);
+
+  if (!insideEditor || range.collapsed || !text.trim()) {
+    hideSelectionBubble();
+    return;
+  }
+
+  const rect = range.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) { hideSelectionBubble(); return; }
+
+  saveBubbleSelection();
+
+  const left = Math.min(Math.max(80, rect.left + rect.width / 2), window.innerWidth - 80);
+  const top = Math.max(8, rect.top - 46);
+  selectionBubbleEl.style.left = left + "px";
+  selectionBubbleEl.style.top = top + "px";
+  selectionBubbleEl.classList.add("is-visible");
+}
+
+function hideSelectionBubble() {
+  selectionBubbleEl?.classList.remove("is-visible");
+}
+
 /**
  * Inisialisasi editor pada elemen tertentu.
  */
@@ -967,6 +1073,21 @@ export function initEditor(containerEl, initialHtml, onChange) {
     }
   });
 
+  // Selection bubble (Cut / Copy / Paste) — dibuat sekali, dipakai ulang
+  if (!selectionBubbleEl) selectionBubbleEl = createSelectionBubble();
+  editorEl.addEventListener("mouseup", positionSelectionBubble);
+  editorEl.addEventListener("keyup", positionSelectionBubble);
+  document.addEventListener("selectionchange", () => {
+    if (document.activeElement === editorEl || editorEl.contains(document.activeElement)) {
+      positionSelectionBubble();
+    } else {
+      hideSelectionBubble();
+    }
+  });
+  document.addEventListener("mousedown", (e) => {
+    if (!selectionBubbleEl.contains(e.target)) hideSelectionBubble();
+  });
+
   editorEl.addEventListener("keydown", (e) => {
     const ctrlOrCmd = e.ctrlKey || e.metaKey;
     if (ctrlOrCmd && e.key.toLowerCase() === "z" && !e.shiftKey) {
@@ -1000,8 +1121,28 @@ export function initEditor(containerEl, initialHtml, onChange) {
   // Floating toolbar
   floatingToolbarEl = createFloatingToolbar();
   window.addEventListener("scroll", checkFloatingToolbarVisibility, { passive: true });
+  window.addEventListener("scroll", hideSelectionBubble, { passive: true });
   editorEl.addEventListener("keyup", updateFloatingToolbarState);
   editorEl.addEventListener("mouseup", updateFloatingToolbarState);
+
+  // Selection bubble (Cut / Copy / Paste) — muncul saat ada teks yang diblok
+  selectionBubbleEl = createSelectionBubble();
+  editorEl.addEventListener("mouseup", () => setTimeout(positionSelectionBubble, 0));
+  editorEl.addEventListener("keyup", (e) => {
+    if (e.shiftKey || e.key === "Shift") setTimeout(positionSelectionBubble, 0);
+  });
+  document.addEventListener("selectionchange", () => {
+    if (document.activeElement === editorEl || editorEl.contains(document.activeElement)) {
+      positionSelectionBubble();
+    } else {
+      hideSelectionBubble();
+    }
+  });
+  editorEl.addEventListener("blur", () => {
+    setTimeout(() => {
+      if (!selectionBubbleEl.matches(":hover")) hideSelectionBubble();
+    }, 150);
+  });
 
   // Mobile: tampilkan/sembunyikan floating toolbar berdasarkan fokus dan keyboard
   editorEl.addEventListener("focus", () => {

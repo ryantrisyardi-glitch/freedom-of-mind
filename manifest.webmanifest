@@ -1,0 +1,30 @@
+{
+  "name": "Freedom of Mind",
+  "short_name": "FoM",
+  "description": "Tempat menyimpan jejak pemikiran yang terus bertumbuh.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FAF7F0",
+  "theme_color": "#C8763A",
+  "orientation": "portrait-primary",
+  "lang": "id",
+  "icons": [
+    { "src": "icons/icon-16.png", "sizes": "16x16", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-32.png", "sizes": "32x32", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-152.png", "sizes": "152x152", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Tulis catatan baru",
+      "short_name": "Tulis",
+      "url": "./editor.html",
+      "icons": [{ "src": "icons/icon-open-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}
