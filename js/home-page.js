@@ -57,6 +57,7 @@ function render() {
     <div class="showcase-dots" id="showcaseDots">
       ${chapters.map((_, i) => `<button class="showcase-dots__dot ${i === activeIndex ? "is-active" : ""}" data-dot="${i}" aria-label="Chapter ${i + 1}"></button>`).join("")}
     </div>
+    ${chapters.length > 1 ? `<p class="showcase-hint">↔ Geser atau swipe untuk melihat chapter lain</p>` : ""}
   `;
 
   renderAddButton();
@@ -198,16 +199,28 @@ function attachDrag() {
   wasDragged = false;
 
   let startX = 0;
+  let startY = 0;
   let dragging = false;
   let deltaX = 0;
+  let deltaY = 0;
   let downTarget = null;
+  let isVerticalScroll = false; // gestur lebih condong ke atas/bawah → biarkan halaman scroll, jangan navigasi
 
   const DRAG_THRESHOLD = 10; // px gerakan minimum supaya dianggap drag, bukan klik biasa
-  const SWIPE_THRESHOLD = 60; // px gerakan minimum per kartu supaya dianggap "pindah satu chapter"
+  const SWIPE_THRESHOLD = 50; // px gerakan minimum supaya dianggap "pindah satu chapter" (maksimal 1 chapter per swipe)
 
   function onPointerMove(e) {
-    if (!dragging) return;
+    if (!dragging || isVerticalScroll) return;
     deltaX = e.clientX - startX;
+    deltaY = e.clientY - startY;
+
+    // Kalau gerakan vertikal lebih dominan dari horizontal, ini gestur scroll
+    // halaman (bukan geser carousel) — biarkan browser yang scroll, dan jangan
+    // anggap ini sebagai tap saat jari diangkat nanti.
+    if (!wasDragged && Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > DRAG_THRESHOLD) {
+      isVerticalScroll = true;
+      return;
+    }
 
     if (!wasDragged && Math.abs(deltaX) < DRAG_THRESHOLD) return; // belum dianggap drag
 
@@ -226,10 +239,18 @@ function attachDrag() {
     document.removeEventListener("pointerup", onPointerUp);
     document.removeEventListener("pointercancel", onPointerUp);
 
+    if (isVerticalScroll) {
+      isVerticalScroll = false;
+      return; // ini scroll halaman, bukan interaksi carousel — jangan lakukan apa-apa
+    }
+
     if (wasDragged) {
-      // Boleh lompat lebih dari 1 chapter sekali geser kalau geserannya jauh/cepat.
-      const cardsMoved = Math.round(-deltaX / SWIPE_THRESHOLD);
-      const newIndex = Math.max(0, Math.min(chapters.length - 1, activeIndex + cardsMoved));
+      // Maksimal pindah 1 chapter per swipe — supaya selalu "on point" ke
+      // chapter sebelum/sesudahnya, tidak meloncat lebih dari satu.
+      let newIndex = activeIndex;
+      if (deltaX <= -SWIPE_THRESHOLD) newIndex = Math.min(chapters.length - 1, activeIndex + 1);
+      else if (deltaX >= SWIPE_THRESHOLD) newIndex = Math.max(0, activeIndex - 1);
+
       if (newIndex !== activeIndex) {
         // Simpan posisi geser saat ini supaya animasi lanjut mulus dari sini
         // (bukan lompat balik ke posisi tengah lama dulu baru animasi).
@@ -254,8 +275,11 @@ function attachDrag() {
     // Hanya tombol primer (klik kiri mouse), abaikan klik kanan / multi-touch
     if (e.pointerType === "mouse" && e.button !== 0) return;
     dragging = true;
+    isVerticalScroll = false;
     startX = e.clientX;
+    startY = e.clientY;
     deltaX = 0;
+    deltaY = 0;
     downTarget = e.target;
     // Dengarkan di document (bukan setPointerCapture) supaya tidak mengganggu
     // event click/native browser pada anak elemen (tombol, link) di dalam kartu.

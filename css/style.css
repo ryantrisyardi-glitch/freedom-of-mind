@@ -281,6 +281,15 @@ button{ font-family: inherit; }
 }
 .showcase-dots__dot.is-active{ background: var(--terracotta); width: 11px; height: 11px; }
 
+.showcase-hint{
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: .02em;
+  color: var(--sage);
+  margin: -8px 0 22px;
+}
+
 .chapter-showcase__admin-edit{
   position: absolute; top: 14px; right: 14px; display: flex; gap: 6px; z-index: 3;
 }

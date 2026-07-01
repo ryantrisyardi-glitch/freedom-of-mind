@@ -1125,19 +1125,7 @@ export function initEditor(containerEl, initialHtml, onChange) {
   editorEl.addEventListener("keyup", updateFloatingToolbarState);
   editorEl.addEventListener("mouseup", updateFloatingToolbarState);
 
-  // Selection bubble (Cut / Copy / Paste) — muncul saat ada teks yang diblok
-  selectionBubbleEl = createSelectionBubble();
-  editorEl.addEventListener("mouseup", () => setTimeout(positionSelectionBubble, 0));
-  editorEl.addEventListener("keyup", (e) => {
-    if (e.shiftKey || e.key === "Shift") setTimeout(positionSelectionBubble, 0);
-  });
-  document.addEventListener("selectionchange", () => {
-    if (document.activeElement === editorEl || editorEl.contains(document.activeElement)) {
-      positionSelectionBubble();
-    } else {
-      hideSelectionBubble();
-    }
-  });
+  // Sembunyikan selection bubble saat editor kehilangan fokus
   editorEl.addEventListener("blur", () => {
     setTimeout(() => {
       if (!selectionBubbleEl.matches(":hover")) hideSelectionBubble();
