@@ -275,7 +275,7 @@ export async function getAllReaders() {
 
 export async function deleteReader(uid) {
   await deleteDoc(doc(db, "readers", uid));
-}
+
   const snap = await getDocs(collection(db, "admins"));
   return snap.docs.map((d) => d.id);
 }
