@@ -259,6 +259,22 @@ export function listenComments(noteId, onChange, onError) {
 
 // ---------- Admins ----------
 
+export async function getAllAdmins() {
+  const snap = await getDocs(collection(db, "admins"));
+  return snap.docs.map((d) => d.id);
+}
+
+export async function addAdmin(email, addedBy) {
+  return setDoc(doc(db, "admins", email.toLowerCase()), {
+    addedBy,
+    addedAt: serverTimestamp(),
+  });
+}
+
+export async function removeAdmin(email) {
+  return deleteDoc(doc(db, "admins", email.toLowerCase()));
+}
+
 // =========================================================
 // READERS — siapa saja yang membaca (hanya yang login)
 // Dokumen: readers/{uid}
@@ -275,20 +291,4 @@ export async function getAllReaders() {
 
 export async function deleteReader(uid) {
   await deleteDoc(doc(db, "readers", uid));
-}
-
-export async function getAllAdmins() {
-  const snap = await getDocs(collection(db, "admins"));
-  return snap.docs.map((d) => d.id);
-}
-
-export async function addAdmin(email, addedBy) {
-  return setDoc(doc(db, "admins", email.toLowerCase()), {
-    addedBy,
-    addedAt: serverTimestamp(),
-  });
-}
-
-export async function removeAdmin(email) {
-  return deleteDoc(doc(db, "admins", email.toLowerCase()));
 }
