@@ -41,6 +41,6 @@ window.CLOUDINARY_CONFIG = {
 // Cara mendapatkan:
 // 1. https://analytics.google.com → Buat Property baru (pilih Web)
 // 2. Masukkan URL situs GitHub Pages kamu
-// 3. Salin "Measurement ID" (format: G-XXXXXXXXXX) → tempel di bawah
+// 3. Salin "Measurement ID" (format: G-193HNCVYVP) → tempel di bawah
 // ---------------------------------------------------------------
 window.GA_MEASUREMENT_ID = "G-193HNCVYVP"; // ← GANTI dengan ID milikmu

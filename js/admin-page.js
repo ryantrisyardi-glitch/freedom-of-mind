@@ -80,46 +80,63 @@ function render() {
 
 // ---- Tab: Analitik ----------------------------------------
 function renderAnalytics() {
-  const today = new Date().toISOString().slice(0,10);
-  const weekAgo  = daysAgo(7);
-  const monthAgo = daysAgo(30);
+  const today   = new Date().toISOString().slice(0,10);
+  const weekAgo = daysAgo(7);
+  const monthAgo= daysAgo(30);
 
   let todayViews=0, weekViews=0, monthViews=0;
   let todayUniq=0,  weekUniq=0,  monthUniq=0;
-  const devices = {}, browsers = {}, os = {};
-  const dailyMap = {};
+  let totalReadSecs=0, totalReadSessions=0;
+  const devices={}, browsers={}, os={}, countries={}, cities={};
+  const dailyMap={};
 
   pageStats.forEach(v => {
     const views = v.views || 0;
     const uniq  = v.uniqueVisitors || 0;
-    if (v.date === today)      { todayViews+=views; todayUniq+=uniq; }
-    if (v.date >= weekAgo)     { weekViews +=views; weekUniq +=uniq; }
-    if (v.date >= monthAgo)    { monthViews+=views; monthUniq+=uniq; }
+    if (v.date === today)   { todayViews+=views; todayUniq+=uniq; }
+    if (v.date >= weekAgo)  { weekViews +=views; weekUniq +=uniq; }
+    if (v.date >= monthAgo) { monthViews+=views; monthUniq+=uniq; }
     dailyMap[v.date] = (dailyMap[v.date]||0) + views;
+    totalReadSecs    += v.totalReadSeconds || 0;
+    totalReadSessions+= v.readSessions     || 0;
 
-    // Device / browser / OS breakdown
-    Object.entries(v).forEach(([k,val]) => {
-      if (!Number.isInteger(val) || val<1) return;
-      if (k.startsWith("devices_"))  devices[k.replace("devices_","")]  = (devices[k.replace("devices_","")]||0)+val;
-      if (k.startsWith("browsers_")) browsers[k.replace("browsers_","")] = (browsers[k.replace("browsers_","")]||0)+val;
-      if (k.startsWith("os_"))       os[k.replace("os_","")]             = (os[k.replace("os_","")]||0)+val;
+    // Agregasi device / browser / OS / lokasi dari semua field dengan prefix
+    Object.entries(v).forEach(([k, val]) => {
+      if (!Number.isInteger(val) || val < 1) return;
+      if (k.startsWith("devices_"))  devices[k.slice(8)]  = (devices[k.slice(8)]||0)+val;
+      if (k.startsWith("browsers_")) browsers[k.slice(9)] = (browsers[k.slice(9)]||0)+val;
+      if (k.startsWith("os_"))       os[k.slice(3)]       = (os[k.slice(3)]||0)+val;
+      if (k.startsWith("countries_"))countries[k.slice(10)]=(countries[k.slice(10)]||0)+val;
+      if (k.startsWith("cities_"))   cities[k.slice(7)]   =(cities[k.slice(7)]||0)+val;
     });
   });
 
-  const totalReaders = readers.length;
-  const newReaders   = readers.filter(r => isNew(r.firstSeen)).length;
+  // Rata-rata durasi baca
+  const avgSecs = totalReadSessions > 0 ? Math.round(totalReadSecs / totalReadSessions) : 0;
+  const avgDurStr = avgSecs >= 60
+    ? `${Math.floor(avgSecs/60)}m ${avgSecs%60}s`
+    : avgSecs > 0 ? `${avgSecs}s` : "—";
 
-  // 7-day sparkline labels
+  // Pembaca baru vs kembali
+  const newReaders = readers.filter(r => isNew(r.firstSeen)).length;
+  const ga4Active  = window.GA_MEASUREMENT_ID && window.GA_MEASUREMENT_ID !== "G-XXXXXXXXXX";
+
+  // 7-day sparkline
   const last7 = Array.from({length:7},(_,i)=>daysAgo(6-i));
   const max7   = Math.max(1,...last7.map(d=>dailyMap[d]||0));
 
   return `
+    ${ga4Active
+      ? `<div class="stat-banner stat-banner--ok">✅ Google Analytics aktif (${window.GA_MEASUREMENT_ID}) — data lokasi detail & perilaku pengguna tersedia di <a href="https://analytics.google.com" target="_blank">analytics.google.com ↗</a></div>`
+      : `<div class="stat-banner stat-banner--warn">⚠️ Google Analytics belum aktif — isi Measurement ID di js/firebase-config.js untuk data lokasi lebih detail</div>`}
+
     <!-- Summary cards -->
     <div class="stat-grid">
-      ${statCard("Hari ini","👁",todayViews,"kunjungan",todayUniq+" unik")}
-      ${statCard("7 Hari","📅",weekViews,"kunjungan",weekUniq+" unik")}
-      ${statCard("30 Hari","📆",monthViews,"kunjungan",monthUniq+" unik")}
-      ${statCard("Pembaca Login","👤",totalReaders,"akun",newReaders+" baru (7h)")}
+      ${statCard("Hari ini","👁",todayViews,"kunjungan",`${todayUniq} unik`)}
+      ${statCard("7 Hari","📅",weekViews,"kunjungan",`${weekUniq} unik`)}
+      ${statCard("30 Hari","📆",monthViews,"kunjungan",`${monthUniq} unik`)}
+      ${statCard("Durasi Rata-rata","⏱",avgDurStr,"per sesi",`${totalReadSessions} sesi`)}
+      ${statCard("Pembaca Login","👤",readers.length,"akun",`${newReaders} baru (7h)`)}
     </div>
 
     <!-- 7-day bar chart -->
@@ -129,11 +146,10 @@ function renderAnalytics() {
         ${last7.map(d => {
           const v = dailyMap[d]||0;
           const h = Math.round((v/max7)*100);
-          const label = d.slice(5); // MM-DD
           return `<div class="bar-chart__col">
             <div class="bar-chart__bar" style="height:${h}%" title="${v} kunjungan"></div>
             <div class="bar-chart__val">${v}</div>
-            <div class="bar-chart__label">${label}</div>
+            <div class="bar-chart__label">${d.slice(5)}</div>
           </div>`;
         }).join("")}
       </div>
@@ -143,42 +159,48 @@ function renderAnalytics() {
     <div class="stat-section">
       <h3 class="stat-section__title">Halaman Paling Banyak Dibaca (30 hari)</h3>
       ${popularPages.length === 0
-        ? `<p class="empty-state" style="margin:12px 0">Belum ada data halaman. Data muncul setelah ada pengunjung.</p>`
+        ? `<p class="empty-state" style="margin:12px 0;font-size:.85rem">Belum ada data. Kunjungi beberapa halaman dulu.</p>`
         : `<div class="popular-list">
           ${popularPages.map((p,i) => {
             const maxV = popularPages[0].views||1;
             const pct  = Math.round((p.views/maxV)*100);
             const icon = p.type==="chapter"?"📖":p.type==="note"?"📝":"🏠";
+            const avgD = p.readSessions>0 ? Math.round((p.totalReadSeconds||0)/p.readSessions) : 0;
+            const dur  = avgD>=60 ? `${Math.floor(avgD/60)}m${avgD%60}s` : avgD>0 ? `${avgD}s` : "";
             return `<div class="popular-row">
               <span class="popular-row__rank">${i+1}</span>
               <div class="popular-row__info">
                 <span class="popular-row__title">${icon} ${escHtml(p.title||p.path)}</span>
                 <div class="popular-row__bar"><div style="width:${pct}%"></div></div>
               </div>
-              <span class="popular-row__count">${p.views} views</span>
+              <div class="popular-row__right">
+                <span class="popular-row__count">${p.views} views</span>
+                ${dur?`<span class="popular-row__dur">⏱ ${dur}</span>`:""}
+              </div>
             </div>`;
           }).join("")}
         </div>`}
     </div>
 
-    <!-- Device / Browser / OS breakdown -->
+    <!-- Device / Browser / OS / Location -->
     <div class="stat-row-3">
-      ${breakdownCard("Device",devices,{"desktop":"💻","mobile":"📱","tablet":"📟"})}
-      ${breakdownCard("Browser",browsers,{"chrome":"🟡","safari":"🔵","firefox":"🦊","edge":"🔷","other":"⚪"})}
-      ${breakdownCard("OS",os,{"windows":"🪟","macos":"🍎","android":"🤖","ios":"📱","linux":"🐧","other":"⚪"})}
+      ${breakdownCard("Device",   devices,  {"desktop":"💻","mobile":"📱","tablet":"📟"})}
+      ${breakdownCard("Browser",  browsers, {"chrome":"🟡","safari":"🔵","firefox":"🦊","edge":"🔷","opera":"🔴","other":"⚪"})}
+      ${breakdownCard("OS",       os,       {"windows":"🪟","macos":"🍎","android":"🤖","ios":"📱","linux":"🐧","other":"⚪"})}
     </div>
-
-    <p class="stat-note">
-      📍 Data lokasi & metrik lebih detail tersedia di
-      <a href="https://analytics.google.com" target="_blank" rel="noopener">Google Analytics ↗</a>
-      (aktifkan dengan mengisi Measurement ID di js/firebase-config.js).
-    </p>`;
+    <div class="stat-row-3">
+      ${breakdownCard("Negara",   countries, {})}
+      ${breakdownCard("Kota",     cities,    {})}
+      ${breakdownCard("New vs Kembali", {"Pembaca baru": newReaders, "Sudah pernah": Math.max(0, readers.length - newReaders)}, {"Pembaca baru":"🌱","Sudah pernah":"🔄"})}
+    </div>`;
+}
 }
 
 function statCard(label, icon, value, unit, sub) {
+  const display = typeof value === "number" ? value.toLocaleString("id-ID") : value;
   return `<div class="stat-card">
     <div class="stat-card__icon">${icon}</div>
-    <div class="stat-card__val">${value.toLocaleString("id-ID")}</div>
+    <div class="stat-card__val">${display}</div>
     <div class="stat-card__unit">${unit}</div>
     <div class="stat-card__label">${label}</div>
     <div class="stat-card__sub">${sub}</div>

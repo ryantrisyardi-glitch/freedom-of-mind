@@ -318,10 +318,17 @@ export async function getPopularPages(limitN = 15) {
   snap.docs.forEach(d => {
     const v = d.data();
     if (!byPath[v.path]) {
-      byPath[v.path] = { path: v.path, title: v.title, type: v.type || "other", views: 0, uniqueVisitors: 0 };
+      byPath[v.path] = { path: v.path, title: v.title, type: v.type || "other",
+        views: 0, uniqueVisitors: 0, totalReadSeconds: 0, readSessions: 0 };
     }
-    byPath[v.path].views += v.views || 0;
-    byPath[v.path].uniqueVisitors += v.uniqueVisitors || 0;
+    byPath[v.path].views            += v.views             || 0;
+    byPath[v.path].uniqueVisitors   += v.uniqueVisitors    || 0;
+    byPath[v.path].totalReadSeconds += v.totalReadSeconds  || 0;
+    byPath[v.path].readSessions     += v.readSessions      || 0;
+    // Prefer non-fallback title (yang sudah diupdate oleh updateAnalyticsTitle)
+    if (v.title && v.title.length > 3 && !v.title.startsWith("chapter ") && !v.title.startsWith("note ")) {
+      byPath[v.path].title = v.title;
+    }
   });
   return Object.values(byPath).sort((a, b) => b.views - a.views).slice(0, limitN);
 }

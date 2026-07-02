@@ -854,8 +854,19 @@ button{ font-family: inherit; }
 }
 .popular-row__count{
   font-family: var(--font-mono); font-size: 11px; color: var(--sage);
-  flex-shrink: 0; width: 56px; text-align: right;
+  flex-shrink: 0; text-align: right;
 }
+.popular-row__right{ display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0; }
+.popular-row__dur{ font-family:var(--font-mono); font-size:10px; color:var(--terracotta); }
+
+.stat-banner{
+  border-radius: 10px; padding: 10px 14px;
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6;
+  margin-bottom: 20px;
+}
+.stat-banner--ok   { background: #f0f8f0; border:1px solid #b8d8b8; color:#3a6b3a; }
+.stat-banner--warn { background: #fff8ed; border:1px solid var(--terracotta-dim); color: var(--ink-soft); }
+.stat-banner a     { color: var(--terracotta); }
 
 /* Device / Browser / OS breakdown */
 .stat-row-3{

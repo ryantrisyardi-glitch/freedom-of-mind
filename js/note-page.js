@@ -2,7 +2,7 @@
 // NOTE PAGE — render satu catatan, share bar, komentar
 // =========================================================
 
-import { initAnalytics } from "./analytics.js";
+import { initAnalytics, updateAnalyticsTitle } from "./analytics.js";
 import { initApp, onAuthReady, currentUser, currentIsAdmin, showConfirm } from "./ui-shared.js";
 import { getNote, getChapter, addComment, deleteComment, listenComments, publishNote, unpublishNote } from "./data.js";
 import { auth, googleSignIn } from "./firebase-core.js";
@@ -175,7 +175,7 @@ async function init() {
 
   chapter = await getChapter(note.chapterId).catch(() => null);
   document.title = note.judul + " — Freedom of Mind";
-  // GA4: kirim event "view_note" dengan judul catatan yang dibuka
+  updateAnalyticsTitle(note.judul);
   if (window.gtag) window.gtag("event", "view_note", { note_title: note.judul, note_id: noteId });
 
   document.getElementById("breadcrumb").innerHTML = `
