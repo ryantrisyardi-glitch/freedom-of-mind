@@ -2,6 +2,7 @@
 // EDITOR PAGE — halaman edit/tulis catatan (admin only)
 // =========================================================
 
+import { initAnalytics } from "./analytics.js";
 import { initApp, onAuthReady, currentUser, currentIsAdmin } from "./ui-shared.js";
 import { getNote, updateNote, getChapter, getAllChapters, moveNoteToChapter, publishNote, unpublishNote } from "./data.js";
 import { initEditor, getEditorHtml } from "./editor.js";
@@ -181,5 +182,6 @@ async function init() {
 
 (async () => {
   await initApp();
+  initAnalytics();
   onAuthReady(() => { if (!editorInitialized) init(); });
 })();

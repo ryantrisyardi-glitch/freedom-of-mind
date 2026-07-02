@@ -67,6 +67,14 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isSuperadmin();
     }
+
+    // Pembaca yang login bisa menulis data kunjungan mereka sendiri.
+    // Admin bisa membaca semua data pembaca. Superadmin bisa menghapus.
+    match /readers/{uid} {
+      allow read: if isAdmin();
+      allow create, update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if isSuperadmin();
+    }
   }
 }
 ```
@@ -183,7 +191,40 @@ js/
   admin-page.js                         → logic masing-masing halaman (jangan diedit)
 ```
 
-## Yang aman diedit kapan saja
+## Analytics — siapa saja pembacamu & dari mana
+
+Aplikasi ini memiliki **dua lapisan tracking**:
+
+### 1. Google Analytics 4 (semua pengunjung, termasuk anonim)
+
+Untuk mengaktifkan:
+1. Buka [analytics.google.com](https://analytics.google.com) → **Start measuring** → buat Property baru
+2. Pilih **Web**, masukkan URL GitHub Pages-mu (misal `https://username.github.io/freedom-of-mind`)
+3. Selesai setup → salin **Measurement ID** (format: `G-XXXXXXXXXX`)
+4. Buka `js/firebase-config.js` → ganti nilai `window.GA_MEASUREMENT_ID` dengan ID-mu
+
+Setelah aktif, GA4 secara otomatis melacak:
+- Jumlah pengunjung harian/mingguan/bulanan
+- **Lokasi** (kota & negara) pembaca
+- **Device** yang dipakai (HP/PC, OS, browser)
+- Halaman mana yang paling banyak dibuka (termasuk chapter & catatan mana)
+- Durasi baca rata-rata
+- Custom event: `view_chapter` (saat chapter dibuka) dan `view_note` (saat catatan dibuka)
+
+### 2. Dashboard Pembaca di admin.html (pembaca yang login)
+
+Setiap pembaca yang login dengan Google tercatat otomatis ke Firestore:
+- Nama & foto profil Google-nya
+- Email
+- Terakhir online (kapan)
+- Halaman mana saja yang pernah dibuka
+- Berapa halaman yang sudah dikunjungi
+
+Akses: buka `admin.html` → tab **👁 Pembaca**.
+
+> ⚠️ **Penting**: Update Firestore Rules (di bagian Setup awal di atas) dengan versi terbaru yang sudah menyertakan aturan untuk koleksi `readers`.
+
+
 ✅ `js/firebase-config.js` (config & email superadmin)
 ✅ Menulis/mengedit catatan, chapter (judul/tagline/gambar sampul) lewat antarmuka di browser (tidak menyentuh kode sama sekali)
 ✅ Mengganti file-file di `icons/` kalau ingin ganti desain ikon PWA (ukuran & nama file harus sama)

@@ -2,6 +2,7 @@
 // HOME PAGE — showcase chapter ala carousel "you are here"
 // =========================================================
 
+import { initAnalytics } from "./analytics.js";
 import { initApp, onAuthReady, currentIsAdmin, showModal, showChoice } from "./ui-shared.js";
 import { getAllChapters, createChapter, updateChapter, deleteChapter, getAllNotes, QUICK_NOTES_NAME, uploadToCloudinary } from "./data.js";
 import { defaultChapterArt } from "./chapter-art.js";
@@ -428,6 +429,7 @@ async function handleDeleteChapter(id) {
 
 (async () => {
   await initApp();
+  initAnalytics();
   onAuthReady(() => { render(); });
   await loadAndRender();
 })();

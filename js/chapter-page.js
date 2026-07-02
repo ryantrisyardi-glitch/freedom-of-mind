@@ -2,6 +2,7 @@
 // CHAPTER PAGE — daftar notes dalam satu chapter, tombol tambah (admin)
 // =========================================================
 
+import { initAnalytics } from "./analytics.js";
 import { initApp, onAuthReady, currentIsAdmin, showModal, showConfirm } from "./ui-shared.js";
 import { getChapter, getNotesByChapter, getNotesByChapterForAdmin, createNote, deleteNote, updateNote, uploadToCloudinary } from "./data.js";
 import { defaultChapterArt } from "./chapter-art.js";
@@ -43,6 +44,8 @@ async function loadAndRender() {
     return;
   }
   document.title = chapter.judul + " — Freedom of Mind";
+  // GA4: kirim event "view_chapter" dengan nama chapter yang dibuka
+  if (window.gtag) window.gtag("event", "view_chapter", { chapter_title: chapter.judul, chapter_id: chapterId });
   render();
 }
 
@@ -257,5 +260,6 @@ async function handleCoverUpload(noteId, btn) {
 
 (async () => {
   await initApp();
+  initAnalytics();
   onAuthReady(() => { loadAndRender(); });
 })();

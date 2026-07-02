@@ -2,6 +2,7 @@
 // TRASH PAGE — restore / hapus permanen chapter & catatan (admin only)
 // =========================================================
 
+import { initAnalytics } from "./analytics.js";
 import { initApp, onAuthReady, currentUser, currentIsAdmin, showConfirm } from "./ui-shared.js";
 import {
   getTrashedChapters,
@@ -141,5 +142,6 @@ async function handleForeverNote(id) {
 
 (async () => {
   await initApp();
+  initAnalytics();
   onAuthReady(() => { loadAndRender(); });
 })();

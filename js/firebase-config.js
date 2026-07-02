@@ -35,3 +35,12 @@ window.CLOUDINARY_CONFIG = {
   cloudName: "duhnlnhuj",
   uploadPreset: "freedom-of-mind"
 };
+
+// ---------------------------------------------------------------
+// Google Analytics 4 — Measurement ID
+// Cara mendapatkan:
+// 1. https://analytics.google.com → Buat Property baru (pilih Web)
+// 2. Masukkan URL situs GitHub Pages kamu
+// 3. Salin "Measurement ID" (format: G-XXXXXXXXXX) → tempel di bawah
+// ---------------------------------------------------------------
+window.GA_MEASUREMENT_ID = "G-193HNCVYVP"; // ← GANTI dengan ID milikmu

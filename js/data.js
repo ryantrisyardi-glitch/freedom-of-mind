@@ -259,7 +259,23 @@ export function listenComments(noteId, onChange, onError) {
 
 // ---------- Admins ----------
 
-export async function getAllAdmins() {
+// =========================================================
+// READERS — siapa saja yang membaca (hanya yang login)
+// Dokumen: readers/{uid}
+// Fields: uid, name, email, photoURL, lastSeen, lastPage,
+//         lastPath, pages (map of path → true)
+// =========================================================
+
+export async function getAllReaders() {
+  const snap = await getDocs(
+    query(collection(db, "readers"), orderBy("lastSeen", "desc"))
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function deleteReader(uid) {
+  await deleteDoc(doc(db, "readers", uid));
+}
   const snap = await getDocs(collection(db, "admins"));
   return snap.docs.map((d) => d.id);
 }

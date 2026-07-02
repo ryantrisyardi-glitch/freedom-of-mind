@@ -25,6 +25,9 @@ export async function initApp() {
     currentIsAdmin = user ? await checkIsAdmin(user.email) : false;
     renderTopnav();
     onAuthChangeCallbacks.forEach((cb) => cb(currentUser, currentIsAdmin));
+    // Dispatch custom event supaya analytics.js bisa mencatat reader
+    // tanpa circular import ke ui-shared.
+    document.dispatchEvent(new CustomEvent("fom:user-ready", { detail: { user } }));
   });
   return true;
 }
