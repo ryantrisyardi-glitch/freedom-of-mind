@@ -194,7 +194,7 @@ function renderAnalytics() {
       ${breakdownCard("New vs Kembali", {"Pembaca baru": newReaders, "Sudah pernah": Math.max(0, readers.length - newReaders)}, {"Pembaca baru":"🌱","Sudah pernah":"🔄"})}
     </div>`;
 }
-}
+
 
 function statCard(label, icon, value, unit, sub) {
   const display = typeof value === "number" ? value.toLocaleString("id-ID") : value;
