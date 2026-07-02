@@ -25,8 +25,10 @@ import {
   query,
   where,
   orderBy,
+  limit,
   onSnapshot,
   serverTimestamp,
+  increment,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 export const QUICK_NOTES_NAME = "Quick Notes";
@@ -292,3 +294,36 @@ export async function getAllReaders() {
 export async function deleteReader(uid) {
   await deleteDoc(doc(db, "readers", uid));
 }
+
+// =========================================================
+// PAGE VIEWS — statistik kunjungan (semua pengunjung termasuk anonim)
+// Dokumen: pageViews/{YYYY-MM-DD_pageKey}
+// =========================================================
+
+export async function getPageViewStats(days = 30) {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+  const startStr = startDate.toISOString().slice(0, 10);
+  const snap = await getDocs(
+    query(collection(db, "pageViews"), where("date", ">=", startStr), orderBy("date", "desc"))
+  );
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function getPopularPages(limitN = 15) {
+  const snap = await getDocs(
+    query(collection(db, "pageViews"), orderBy("views", "desc"), limit(limitN * 5))
+  );
+  const byPath = {};
+  snap.docs.forEach(d => {
+    const v = d.data();
+    if (!byPath[v.path]) {
+      byPath[v.path] = { path: v.path, title: v.title, type: v.type || "other", views: 0, uniqueVisitors: 0 };
+    }
+    byPath[v.path].views += v.views || 0;
+    byPath[v.path].uniqueVisitors += v.uniqueVisitors || 0;
+  });
+  return Object.values(byPath).sort((a, b) => b.views - a.views).slice(0, limitN);
+}
+
+export { increment };

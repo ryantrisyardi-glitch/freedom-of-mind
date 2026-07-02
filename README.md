@@ -75,6 +75,20 @@ service cloud.firestore {
       allow create, update: if isSignedIn() && request.auth.uid == uid;
       allow delete: if isSuperadmin();
     }
+
+    // Statistik kunjungan halaman (termasuk pengunjung anonim).
+    // Semua boleh tulis (increment counter), hanya admin yang bisa baca.
+    match /pageViews/{docId} {
+      allow read: if isAdmin();
+      allow write: if true;
+    }
+
+    // Riwayat halaman yang dikunjungi per reader per hari.
+    match /readerVisits/{docId} {
+      allow read: if isAdmin();
+      allow create, update: if isSignedIn();
+      allow delete: if isSuperadmin();
+    }
   }
 }
 ```
