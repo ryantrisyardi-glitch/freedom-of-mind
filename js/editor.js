@@ -99,6 +99,18 @@ function toggleBlock(tag) {
   updateFloatingToolbarState();
 }
 
+// Pilih semua isi editor
+function selectAllContent() {
+  editorEl.focus();
+  const range = document.createRange();
+  range.selectNodeContents(editorEl);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  updateToolbarState();
+  updateFloatingToolbarState();
+}
+
 // Toggle list
 function toggleList() {
   editorEl.focus();
@@ -186,6 +198,51 @@ function applyTextColor(color) {
   if (!sel.rangeCount || sel.isCollapsed) return;
   editorEl.focus();
   document.execCommand("foreColor", false, useColor);
+  scheduleHistoryPush();
+  triggerChange();
+  updateToolbarState();
+  updateFloatingToolbarState();
+}
+
+// ---------- Paste dibersihkan (kunci font default) ----------
+// Mencegah font asing (Verdana, Times New Roman, dll) ikut masuk saat
+// paste dari Word/Google Docs/situs lain. Tag <font> dihapus (dibungkus-lepas),
+// dan properti font-family/font-size pada style inline dibuang. Warna teks,
+// bold, italic, list, dsb tetap dipertahankan.
+function sanitizePastedFragment(root) {
+  root.querySelectorAll("font").forEach((f) => {
+    while (f.firstChild) f.parentNode.insertBefore(f.firstChild, f);
+    f.parentNode.removeChild(f);
+  });
+  root.querySelectorAll("[style]").forEach((el) => {
+    el.style.removeProperty("font-family");
+    el.style.removeProperty("font-size");
+    el.style.removeProperty("line-height");
+    if (!el.getAttribute("style")) el.removeAttribute("style");
+  });
+  root.querySelectorAll("[class]").forEach((el) => el.removeAttribute("class"));
+  root.querySelectorAll("[face]").forEach((el) => el.removeAttribute("face"));
+  return root;
+}
+
+function handlePaste(e) {
+  e.preventDefault();
+  const cd = e.clipboardData || window.clipboardData;
+  if (!cd) return;
+  const html = cd.getData("text/html");
+  const text = cd.getData("text/plain");
+  editorEl.focus();
+
+  if (html) {
+    const temp = document.createElement("div");
+    temp.innerHTML = html;
+    sanitizePastedFragment(temp);
+    document.execCommand("insertHTML", false, temp.innerHTML);
+  } else if (text) {
+    document.execCommand("insertText", false, text);
+  }
+
+  normalizeEmptyState();
   scheduleHistoryPush();
   triggerChange();
   updateToolbarState();
@@ -366,6 +423,19 @@ function setupHighlightButton(btn) {
   });
   btn.addEventListener("pointerup", () => clearTimeout(holdTimer));
   btn.addEventListener("pointerleave", () => clearTimeout(holdTimer));
+}
+
+// Tombol kecil "▾" di samping highlight/warna teks — cara pasti untuk
+// membuka palet warna di mobile (tanpa tergantung klik-kanan/tekan-lama).
+function setupPaletteCaret(btn) {
+  btn.addEventListener("mousedown", (e) => e.preventDefault());
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    saveSelection();
+    const r = btn.getBoundingClientRect();
+    showColorPalette(r.left, r.bottom + 6);
+  });
 }
 
 function setupTextColorButton(btn) {
@@ -710,13 +780,20 @@ const TOOLBAR_HTML = `
   <div class="toolbar-group">
     <button data-cmd="undo" title="Urungkan (Ctrl+Z)" disabled>↶</button>
     <button data-cmd="redo" title="Ulangi (Ctrl+Shift+Z)" disabled>↷</button>
+    <button data-cmd="selectall" title="Pilih semua (Ctrl+A)">▤ Semua</button>
   </div>
   <div class="toolbar-group">
     <button data-cmd="bold" title="Tebal (Ctrl+B)"><strong>B</strong></button>
     <button data-cmd="italic" title="Miring (Ctrl+I)"><em>I</em></button>
     <button data-cmd="underline" title="Garis bawah"><u>U</u></button>
-    <button data-cmd="highlight" class="btn-highlight" title="Highlight — klik kanan untuk pilih warna" style="--hl-color:#FFF176">▨</button>
-    <button data-cmd="textcolor" class="btn-textcolor" title="Warna teks — klik kanan untuk pilih warna" style="--tc-color:#1A1A1A">A</button>
+    <span class="floating-toolbar__combo">
+      <button data-cmd="highlight" class="btn-highlight" title="Highlight — klik kanan / tekan lama untuk pilih warna" style="--hl-color:#FFF176">▨</button>
+      <button data-cmd="highlight-palette" class="btn-palette-caret" title="Pilih warna highlight">▾</button>
+    </span>
+    <span class="floating-toolbar__combo">
+      <button data-cmd="textcolor" class="btn-textcolor" title="Warna teks — klik kanan / tekan lama untuk pilih warna" style="--tc-color:#1A1A1A">A</button>
+      <button data-cmd="textcolor-palette" class="btn-palette-caret" title="Pilih warna teks">▾</button>
+    </span>
     <button data-cmd="sticky" title="Sticky Note">📌</button>
   </div>
   <div class="toolbar-group">
@@ -757,12 +834,19 @@ const FLOATING_BODY_HTML = `
     <div class="floating-toolbar__row">
       <button data-fcmd="undo" title="Urungkan" disabled>↶</button>
       <button data-fcmd="redo" title="Ulangi" disabled>↷</button>
+      <button data-fcmd="selectall" title="Pilih semua">▤</button>
       <span class="floating-toolbar__sep"></span>
       <button data-fcmd="bold" title="Tebal"><strong>B</strong></button>
       <button data-fcmd="italic" title="Miring"><em>I</em></button>
       <button data-fcmd="underline" title="Garis bawah"><u>U</u></button>
-      <button data-fcmd="highlight" class="btn-highlight" title="Highlight — klik kanan untuk pilih warna" style="--hl-color:#FFF176">▨</button>
-      <button data-fcmd="textcolor" class="btn-textcolor" title="Warna teks — klik kanan untuk pilih warna" style="--tc-color:#1A1A1A">A</button>
+      <span class="floating-toolbar__combo">
+        <button data-fcmd="highlight" class="btn-highlight" title="Highlight — klik kanan / tekan lama untuk pilih warna" style="--hl-color:#FFF176">▨</button>
+        <button data-fcmd="highlight-palette" class="btn-palette-caret" title="Pilih warna highlight">▾</button>
+      </span>
+      <span class="floating-toolbar__combo">
+        <button data-fcmd="textcolor" class="btn-textcolor" title="Warna teks — klik kanan / tekan lama untuk pilih warna" style="--tc-color:#1A1A1A">A</button>
+        <button data-fcmd="textcolor-palette" class="btn-palette-caret" title="Pilih warna teks">▾</button>
+      </span>
       <button data-fcmd="sticky" title="Sticky Note">📌</button>
       <span class="floating-toolbar__sep"></span>
       <button data-fcmd="align-left" title="Rata kiri">⬸</button>
@@ -787,30 +871,32 @@ function createFloatingToolbar() {
   ft.className = "floating-toolbar";
   ft.id = "floatingToolbar";
   ft.innerHTML = `
-    <button class="floating-toolbar__toggle" id="floatingToggle" title="Sembunyikan/tampilkan toolbar">▲</button>
+    <button class="floating-toolbar__toggle" id="floatingToggle" title="Sembunyikan/tampilkan toolbar">▶</button>
     ${FLOATING_BODY_HTML}
   `;
   document.body.appendChild(ft);
 
-  // Toggle collapse
+  // Toggle collapse (docking hide/unhide di pinggir kanan)
   const toggleBtn = ft.querySelector("#floatingToggle");
   toggleBtn.addEventListener("mousedown", e => e.preventDefault());
   toggleBtn.addEventListener("click", e => {
     e.preventDefault();
     floatingCollapsed = !floatingCollapsed;
     ft.classList.toggle("is-collapsed", floatingCollapsed);
-    toggleBtn.textContent = floatingCollapsed ? "▲" : "▼";
+    toggleBtn.textContent = floatingCollapsed ? "◀" : "▶";
     toggleBtn.title = floatingCollapsed ? "Tampilkan toolbar" : "Sembunyikan toolbar";
   });
 
   // Highlight & textcolor buttons – special setup
   ft.querySelectorAll('[data-fcmd="highlight"]').forEach(btn => setupHighlightButton(btn));
   ft.querySelectorAll('[data-fcmd="textcolor"]').forEach(btn => setupTextColorButton(btn));
+  ft.querySelectorAll('[data-fcmd="highlight-palette"]').forEach(setupPaletteCaret);
+  ft.querySelectorAll('[data-fcmd="textcolor-palette"]').forEach(setupPaletteCaret);
 
   // Other buttons
   ft.querySelectorAll("button[data-fcmd]").forEach((btn) => {
     const cmd = btn.dataset.fcmd;
-    if (cmd === "highlight" || cmd === "textcolor") return;
+    if (cmd === "highlight" || cmd === "textcolor" || cmd === "highlight-palette" || cmd === "textcolor-palette") return;
     btn.addEventListener("mousedown", (e) => e.preventDefault());
     btn.addEventListener("click", (e) => {
       e.preventDefault();
@@ -844,6 +930,7 @@ function dispatchCmd(cmd) {
     case "quote-eye": insertQuote("eye"); break;
     case "ul": toggleList(); break;
     case "divider": insertDivider(); break;
+    case "selectall": selectAllContent(); break;
     case "img-left": insertImage("left"); break;
     case "img-right": insertImage("right"); break;
     case "img-center": insertImage("center"); break;
@@ -876,7 +963,6 @@ function checkFloatingToolbarVisibility() {
     // Pada mobile: selalu tampilkan saat editor aktif (keyboard terbuka)
     const isEditorFocused = document.activeElement === editorEl || editorEl.contains(document.activeElement);
     floatingToolbarEl.classList.toggle("is-visible", isEditorFocused);
-    positionFloatingToolbarAboveKeyboard();
   } else {
     // Desktop: tampilkan saat toolbar asli tergulir ke atas
     const toolbar = document.getElementById("editorToolbar");
@@ -884,18 +970,27 @@ function checkFloatingToolbarVisibility() {
     const rect = toolbar.getBoundingClientRect();
     floatingToolbarEl.classList.toggle("is-visible", rect.bottom < 0);
   }
+  positionFloatingToolbarAboveKeyboard();
   updateFloatingToolbarState();
 }
 
 function positionFloatingToolbarAboveKeyboard() {
   if (!floatingToolbarEl) return;
-  // Gunakan visualViewport API jika tersedia (iOS/Android)
+  // Dock berada di pinggir kanan, diposisikan vertikal mengikuti area yang
+  // benar-benar terlihat (visualViewport). Ini memastikan dock tidak pernah
+  // tertutup keyboard virtual saat mobile, karena pusatnya selalu berada
+  // di tengah area yang tersisa setelah keyboard muncul.
   if (window.visualViewport) {
     const vv = window.visualViewport;
-    const bottomOfViewport = vv.offsetTop + vv.height;
-    floatingToolbarEl.style.bottom = (window.innerHeight - bottomOfViewport + 8) + "px";
+    const visibleCenter = vv.offsetTop + vv.height / 2;
+    const safeMax = Math.max(120, vv.height - 24);
+    floatingToolbarEl.style.top = visibleCenter + "px";
+    floatingToolbarEl.style.maxHeight = safeMax + "px";
+    const body = floatingToolbarEl.querySelector(".floating-toolbar__body");
+    if (body) body.style.maxHeight = safeMax + "px";
   } else {
-    floatingToolbarEl.style.bottom = "8px";
+    floatingToolbarEl.style.top = "50%";
+    floatingToolbarEl.style.maxHeight = "";
   }
 }
 
@@ -925,6 +1020,8 @@ function createSelectionBubble() {
   el.className = "selection-bubble";
   el.id = "selectionBubble";
   el.innerHTML = `
+    <button type="button" data-bubble="selectall" title="Pilih semua">▤ Semua</button>
+    <span class="selection-bubble__sep"></span>
     <button type="button" data-bubble="cut" title="Potong">✂ Cut</button>
     <span class="selection-bubble__sep"></span>
     <button type="button" data-bubble="copy" title="Salin">⧉ Copy</button>
@@ -948,6 +1045,13 @@ function createSelectionBubble() {
 
 async function handleBubbleAction(action) {
   editorEl.focus();
+
+  if (action === "selectall") {
+    selectAllContent();
+    positionSelectionBubble();
+    return;
+  }
+
   restoreBubbleSelection();
 
   if (action === "copy") {
@@ -1046,9 +1150,12 @@ export function initEditor(containerEl, initialHtml, onChange) {
   const textColorBtn = containerEl.querySelector('[data-cmd="textcolor"]');
   if (textColorBtn) setupTextColorButton(textColorBtn);
 
+  containerEl.querySelectorAll('[data-cmd="highlight-palette"]').forEach(setupPaletteCaret);
+  containerEl.querySelectorAll('[data-cmd="textcolor-palette"]').forEach(setupPaletteCaret);
+
   containerEl.querySelectorAll(".editor-toolbar button[data-cmd]").forEach((btn) => {
     const cmd = btn.dataset.cmd;
-    if (cmd === "highlight" || cmd === "textcolor") return;
+    if (cmd === "highlight" || cmd === "textcolor" || cmd === "highlight-palette" || cmd === "textcolor-palette") return;
     btn.addEventListener("mousedown", (e) => e.preventDefault());
     btn.addEventListener("click", (e) => {
       e.preventDefault();
@@ -1096,6 +1203,8 @@ export function initEditor(containerEl, initialHtml, onChange) {
       e.preventDefault(); redo();
     }
   });
+
+  editorEl.addEventListener("paste", handlePaste);
 
   editorEl.addEventListener("dragover", (e) => e.preventDefault());
   editorEl.addEventListener("drop", async (e) => {

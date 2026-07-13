@@ -629,6 +629,13 @@ button{ font-family: inherit; }
   line-height: 1;
 }
 .editor-area mark{ background: var(--highlight); padding: 0.05em 0.15em; border-radius:2px; }
+/* Kunci font tetap default: bold/italic/list/paste dari sumber manapun
+   tidak boleh mengubah jenis huruf (Verdana, Times New Roman, dll).
+   Warna teks tetap bisa berubah karena hanya font-family yang dikunci. */
+.editor-area *:not(h2):not(h3):not(blockquote){
+  font-family: inherit !important;
+}
+.editor-area font{ font-family: inherit !important; }
 .editor-area .divider{ text-align:center; color: var(--sage); letter-spacing:.3em; margin: 30px 0; font-size:12px; clear:both; }
 
 .editor-area figure{ margin: 0 0 14px; position: relative; }
@@ -955,25 +962,29 @@ button{ font-family: inherit; }
 /* ========================================================
    FLOATING TOOLBAR — collapsible, full-featured
    ======================================================== */
+/* Docked di pinggir kanan, vertikal, bisa hide/unhide.
+   `top` di-set lewat JS supaya selalu terlihat dan tidak
+   pernah tertutup keyboard virtual di mobile. */
 .floating-toolbar {
   position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%) translateY(12px);
+  top: 50%;
+  right: 10px;
+  left: auto;
+  bottom: auto;
+  transform: translateY(-50%);
   z-index: 300;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   gap: 0;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.22s, transform 0.22s;
-  max-width: calc(100vw - 32px);
+  transition: opacity 0.22s, top 0.15s;
+  max-height: calc(100vh - 32px);
 }
 .floating-toolbar.is-visible {
   opacity: 1;
   pointer-events: auto;
-  transform: translateX(-50%) translateY(0);
 }
 
 /* The collapsible body */
@@ -982,41 +993,47 @@ button{ font-family: inherit; }
   border: 1px solid var(--line);
   border-radius: 14px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.08);
-  padding: 6px 10px;
-  max-height: 200px;
-  overflow: hidden;
-  transition: max-height 0.22s ease, padding 0.22s ease, opacity 0.18s;
+  padding: 8px 6px;
+  max-width: 44px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: max-width 0.2s ease, padding 0.2s ease, opacity 0.15s;
 }
 .floating-toolbar.is-collapsed .floating-toolbar__body {
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
+  max-width: 0;
+  padding-left: 0;
+  padding-right: 0;
   opacity: 0;
+  overflow: hidden;
+  border-left: none;
+  border-right: none;
 }
 
 .floating-toolbar__row {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  flex-wrap: wrap;
+  gap: 3px;
+  flex-wrap: nowrap;
 }
 
-/* Toggle button (^ / v) — always visible when toolbar is shown */
+/* Toggle (hide/unhide) — selalu terlihat di tepi dock */
 .floating-toolbar__toggle {
   background: var(--paper-card);
   border: 1px solid var(--line);
   border-radius: 999px;
-  width: 28px;
-  height: 20px;
-  font-size: 10px;
+  width: 22px;
+  height: 34px;
+  font-size: 11px;
   line-height: 1;
   cursor: pointer;
   color: var(--ink-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 4px;
-  order: 2;
+  margin: 0 4px 0 0;
+  flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   transition: background 0.15s, color 0.15s;
 }
@@ -1027,7 +1044,7 @@ button{ font-family: inherit; }
   background: none;
   border: 1px solid transparent;
   border-radius: 7px;
-  padding: 4px 8px;
+  padding: 5px 7px;
   font-size: 13px;
   cursor: pointer;
   color: var(--ink);
@@ -1038,7 +1055,22 @@ button{ font-family: inherit; }
 .floating-toolbar button[data-fcmd]:hover { border-color: var(--terracotta-dim); background: rgba(0,0,0,0.04); }
 .floating-toolbar button[data-fcmd].is-active { background: var(--terracotta-dim); border-color: var(--terracotta-dim); }
 .floating-toolbar button[data-fcmd]:disabled { opacity: 0.32; cursor: not-allowed; }
-.floating-toolbar__sep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; flex-shrink: 0; }
+.floating-toolbar__sep { width: 22px; height: 1px; background: var(--line); margin: 3px 0; flex-shrink: 0; }
+
+/* Kombo tombol warna + caret pemilih warna (mobile-friendly) */
+.floating-toolbar__combo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+.btn-palette-caret {
+  font-size: 8px !important;
+  padding: 0 6px 3px !important;
+  opacity: 0.6;
+  margin-top: -3px;
+}
+.btn-palette-caret:hover { opacity: 1; }
 
 /* ---------- Selection bubble (cut / copy / paste saat blok teks) ---------- */
 .selection-bubble {
@@ -1055,7 +1087,11 @@ button{ font-family: inherit; }
   pointer-events: none;
   transform: translate(-50%, 6px);
   transition: opacity 0.15s, transform 0.15s;
+  max-width: calc(100vw - 24px);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.selection-bubble::-webkit-scrollbar { display: none; }
 .selection-bubble.is-visible {
   opacity: 1;
   pointer-events: auto;
@@ -1363,56 +1399,40 @@ button{ font-family: inherit; }
    MOBILE — floating toolbar besar, di atas keyboard
    ======================================================== */
 @media (max-width: 768px) {
-  /* Floating toolbar: full-width bar di atas keyboard */
+  /* Floating toolbar tetap dock di pinggir kanan saat mobile.
+     `top` di-set lewat JS mengikuti visualViewport, jadi dock ini
+     selalu ada di area yang terlihat dan tidak pernah tertutup
+     keyboard virtual. */
   .floating-toolbar {
-    bottom: 8px; /* JS akan override via style.bottom */
-    left: 0;
-    right: 0;
-    transform: none;
-    width: 100%;
-    max-width: 100%;
-    border-radius: 0;
-    transition: opacity 0.18s, bottom 0.15s;
-  }
-  .floating-toolbar.is-visible {
-    transform: none;
+    right: 6px;
   }
   .floating-toolbar__body {
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
-    border-bottom: none;
-    padding: 8px 10px 10px;
-    width: 100%;
-    box-sizing: border-box;
+    max-width: 48px;
+    padding: 8px 5px;
+  }
+  .floating-toolbar.is-collapsed .floating-toolbar__body {
+    max-width: 0;
   }
   .floating-toolbar__row {
-    gap: 4px;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding-bottom: 2px;
+    gap: 5px;
   }
-  .floating-toolbar__row::-webkit-scrollbar { display: none; }
 
   /* Tombol lebih besar & mudah disentuh */
   .floating-toolbar button[data-fcmd] {
-    padding: 8px 12px;
+    padding: 8px 9px;
     font-size: 15px;
-    min-width: 36px;
-    min-height: 36px;
+    min-width: 34px;
+    min-height: 34px;
     border-radius: 8px;
     flex-shrink: 0;
   }
   .floating-toolbar__toggle {
-    width: 36px;
-    height: 22px;
-    font-size: 11px;
+    width: 24px;
+    height: 40px;
+    font-size: 13px;
   }
   .floating-toolbar__sep {
-    height: 24px;
-    flex-shrink: 0;
+    width: 24px;
   }
 }
 
