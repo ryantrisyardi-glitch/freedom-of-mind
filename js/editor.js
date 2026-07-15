@@ -1149,7 +1149,15 @@ export function initEditor(containerEl, initialHtml, onChange) {
     <div class="editor-area" id="editorArea" contenteditable="true" data-placeholder="Mulai menulis di sini..."></div>
   `;
   editorEl = containerEl.querySelector("#editorArea");
-  editorEl.innerHTML = initialHtml && initialHtml.trim() ? initialHtml : "";
+  editorEl.innerHTML = initialHtml && initialHtml.trim() ? initialHtml : "<p><br></p>";
+
+  // Pastikan setiap kali Enter ditekan browser membuat <p> baru (bukan <div>,
+  // yang jadi default di sebagian browser) — supaya paragraf pertama SELALU
+  // berupa <p> asli sejak awal mengetik, konsisten untuk semua catatan.
+  try { document.execCommand("defaultParagraphSeparator", false, "p"); } catch {}
+  editorEl.addEventListener("focus", () => {
+    try { document.execCommand("defaultParagraphSeparator", false, "p"); } catch {}
+  });
 
   history = [editorEl.innerHTML];
   historyIndex = 0;
@@ -1285,5 +1293,45 @@ export function initEditor(containerEl, initialHtml, onChange) {
 }
 
 export function getEditorHtml() {
-  return editorEl ? editorEl.innerHTML : "";
+  if (!editorEl) return "";
+  normalizeFirstBlock();
+  return editorEl.innerHTML;
+}
+
+// Drop cap (huruf pertama besar+orange) di halaman baca menyasar elemen
+// `p:first-of-type`. Kalau sebuah catatan ditulis TANPA menekan Enter dulu
+// (langsung ngetik di baris pertama), browser bisa membiarkan teks itu
+// sebagai teks polos (atau di dalam <div>, bukan <p>) sampai Enter pertama
+// ditekan — akibatnya drop cap tidak muncul untuk catatan itu meski catatan
+// lain (yang kebetulan mulai dengan Enter/paste yang sudah ber-<p>) normal.
+// Fungsi ini menormalkan itu tepat sebelum disimpan: teks/`<div>` di awal
+// yang belum terbungkus <p> akan dibungkus jadi <p> asli.
+function normalizeFirstBlock() {
+  const BLOCK_TAGS = new Set(["P","H2","H3","BLOCKQUOTE","UL","OL","FIGURE","DIV","HR"]);
+  const firstNode = editorEl.firstChild;
+  if (!firstNode) return;
+
+  // Kasus 1: node pertama teks polos atau elemen inline (belum terbungkus blok apa pun)
+  // → kumpulkan semua sibling sampai ketemu elemen blok berikutnya, lalu bungkus jadi <p>.
+  const isBlock = (n) => n.nodeType === 1 && BLOCK_TAGS.has(n.tagName);
+  if (!isBlock(firstNode)) {
+    const p = document.createElement("p");
+    let node = firstNode;
+    while (node && !isBlock(node)) {
+      const next = node.nextSibling;
+      p.appendChild(node);
+      node = next;
+    }
+    editorEl.insertBefore(p, node);
+    return;
+  }
+
+  // Kasus 2: node pertama adalah <div> (bukan <p>) — beberapa browser memakai
+  // <div> sebagai paragraf default saat Enter ditekan. Ubah jadi <p> asli
+  // supaya cocok dengan selector p:first-of-type.
+  if (firstNode.tagName === "DIV") {
+    const p = document.createElement("p");
+    p.innerHTML = firstNode.innerHTML;
+    editorEl.replaceChild(p, firstNode);
+  }
 }
