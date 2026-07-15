@@ -111,10 +111,10 @@ function selectAllContent() {
   updateFloatingToolbarState();
 }
 
-// Toggle list
-function toggleList() {
+// Toggle list — ordered=false untuk bullet (•), ordered=true untuk numbering (1. 2. 3.)
+function toggleList(ordered = false) {
   editorEl.focus();
-  document.execCommand("insertUnorderedList", false, null);
+  document.execCommand(ordered ? "insertOrderedList" : "insertUnorderedList", false, null);
   scheduleHistoryPush();
   triggerChange();
   updateToolbarState();
@@ -765,6 +765,8 @@ function updateToolbarState() {
     "align-center": () => { try { return document.queryCommandState("justifyCenter"); } catch { return false; } },
     "align-right":  () => { try { return document.queryCommandState("justifyRight"); } catch { return false; } },
     "align-justify":() => { try { return document.queryCommandState("justifyFull"); } catch { return false; } },
+    ul:             () => { try { return document.queryCommandState("insertUnorderedList"); } catch { return false; } },
+    ol:             () => { try { return document.queryCommandState("insertOrderedList"); } catch { return false; } },
   };
   ["cmd", "fcmd"].forEach(k => {
     Object.entries(map).forEach(([cmd, check]) => {
@@ -813,6 +815,7 @@ const TOOLBAR_HTML = `
   </div>
   <div class="toolbar-group">
     <button data-cmd="ul" title="Daftar berpoin">• List</button>
+    <button data-cmd="ol" title="Daftar bernomor">1. List</button>
     <button data-cmd="divider" title="Pembatas">⋯</button>
   </div>
   <div class="toolbar-group">
@@ -861,6 +864,7 @@ const FLOATING_BODY_HTML = `
       <button data-fcmd="quote-line" title="Kutipan">❝</button>
       <button data-fcmd="quote-eye" title="Kutipan besar">❝!</button>
       <button data-fcmd="ul" title="Daftar berpoin">•</button>
+      <button data-fcmd="ol" title="Daftar bernomor">1.</button>
       <button data-fcmd="divider" title="Pembatas">⋯</button>
     </div>
   </div>
@@ -928,7 +932,8 @@ function dispatchCmd(cmd) {
     case "p": insertParagraph(); break;
     case "quote-line": insertQuote("line"); break;
     case "quote-eye": insertQuote("eye"); break;
-    case "ul": toggleList(); break;
+    case "ul": toggleList(false); break;
+    case "ol": toggleList(true); break;
     case "divider": insertDivider(); break;
     case "selectall": selectAllContent(); break;
     case "img-left": insertImage("left"); break;
@@ -1109,8 +1114,17 @@ function positionSelectionBubble() {
     return;
   }
 
-  const rect = range.getBoundingClientRect();
-  if (rect.width === 0 && rect.height === 0) { hideSelectionBubble(); return; }
+  // range.getBoundingClientRect() bisa mengembalikan rect kosong (0,0,0,0) di
+  // beberapa browser (WebKit/iOS Safari) saat seleksi mencakup banyak baris/
+  // paragraf sekaligus — inilah sebabnya bubble cut/copy/paste/select-all
+  // menghilang saat teks yang diseleksi terlalu banyak. Fallback: ambil rect
+  // per-baris lewat getClientRects() dan gunakan baris pertama yang valid.
+  let rect = range.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) {
+    const rects = [...range.getClientRects()].filter((r) => r.width > 0 || r.height > 0);
+    if (rects.length === 0) { hideSelectionBubble(); return; }
+    rect = rects[0];
+  }
 
   saveBubbleSelection();
 

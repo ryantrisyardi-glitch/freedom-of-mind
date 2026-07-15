@@ -121,44 +121,50 @@ button{ font-family: inherit; }
 .chapter-showcase__track{
   display: flex;
   align-items: stretch;
-  gap: 18px;
+  gap: 16px;
   padding: 6px 4px 26px;
   will-change: transform;
-  transition: transform .55s cubic-bezier(.22,.61,.36,1);
+  transition: transform .45s cubic-bezier(.22,.61,.36,1);
   cursor: grab;
 }
+.chapter-showcase__track:active{ cursor: grabbing; }
 
-/* Satu template kartu dipakai untuk SEMUA chapter — setiap kartu selalu
-   tampil utuh (ada gambar + judul + chip), bukan cuma kotak teks. Kartu yang
-   aktif melebar & menonjol secara halus lewat transisi width/opacity. */
+/* Satu template kartu dipakai untuk SEMUA chapter — dan (fix utama) SEMUA
+   kartu punya lebar yang SAMA. Sebelumnya kartu non-aktif diciutkan sampai
+   230px/128px sehingga chapter sebelum/sesudahnya cuma kelihatan secuil di
+   tepi layar — sekarang kartu tetangga tampil utuh (cukup besar untuk
+   dibaca), persis seperti swipe kartu, bukan hanya potongan kecil. Kartu
+   aktif ditonjolkan lewat scale/opacity/shadow saja (bukan lebar), supaya
+   ukurannya tidak berubah dan animasinya jauh lebih mulus & ringan (hemat
+   layout reflow, tinggal transform+opacity).  */
 .showcase-card{
   position: relative;
   display: flex;
-  align-items: stretch;
+  flex-direction: column;
   flex: 0 0 auto;
-  width: 230px;
+  width: min(420px, 78vw);
   background: var(--paper-card);
   border: 1px solid var(--line);
   border-radius: 18px;
   overflow: hidden;
   box-shadow: 0 1px 0 var(--shadow);
   cursor: pointer;
-  opacity: .8;
+  opacity: .72;
+  transform: scale(.92);
   user-select: none;
   -webkit-user-drag: none;
-  transition: width .55s cubic-bezier(.22,.61,.36,1), opacity .4s ease,
-              box-shadow .4s ease, border-color .4s ease, transform .3s ease;
+  transition: opacity .35s ease, box-shadow .35s ease, border-color .35s ease,
+              transform .35s cubic-bezier(.22,.61,.36,1);
 }
 .showcase-card img, .showcase-card a{ -webkit-user-drag: none; user-drag: none; }
-.showcase-card:hover{ opacity: 1; transform: translateY(-3px); box-shadow: 0 14px 26px var(--shadow); }
+.showcase-card:hover{ opacity: .9; }
 
 .showcase-card.is-active{
-  width: min(680px, 86vw);
   opacity: 1;
+  transform: scale(1);
   border-color: var(--terracotta-dim);
   box-shadow: 0 18px 40px var(--shadow);
 }
-.showcase-card.is-active:hover{ transform: none; }
 
 .showcase-card__body{
   flex: 1 1 auto;
@@ -167,10 +173,9 @@ button{ font-family: inherit; }
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
   position: relative;
 }
-.showcase-card.is-active .showcase-card__body{ padding: 26px 28px; justify-content: flex-start; }
 
 .showcase-card__chip{
   font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em;
@@ -179,51 +184,38 @@ button{ font-family: inherit; }
 .showcase-card.is-active .showcase-card__chip{ color: var(--terracotta); }
 
 .showcase-card h2{
-  font-family: var(--font-display); font-weight: 600; font-size: 1.18rem; line-height: 1.18;
+  font-family: var(--font-display); font-weight: 600; font-size: 1.35rem; line-height: 1.2;
   margin: 0 0 8px; color: var(--ink);
-  transition: font-size .4s ease;
 }
-.showcase-card.is-active h2{ font-weight: 700; font-size: 1.85rem; margin-bottom: 8px; }
+.showcase-card.is-active h2{ font-weight: 700; }
 
-/* Elemen yang hanya muncul saat kartu aktif (badge, tagline, CTA, jumlah
-   catatan, baris admin) — disembunyikan secara halus (bukan display:none)
-   supaya transisinya tetap mulus. */
-.showcase-card__badge,
-.showcase-card__tagline,
-.showcase-card__cta,
-.showcase-card__count,
-.showcase-card__admin-row{
-  max-height: 0;
-  opacity: 0;
-  overflow: hidden;
-  margin: 0;
-  pointer-events: none;
-  transition: max-height .4s ease, opacity .25s ease, margin .4s ease;
-}
+/* Badge, tagline, CTA, jumlah catatan, baris admin — kini SELALU tampil di
+   semua kartu (kartu sudah cukup lebar untuk menampung semuanya), bukan
+   cuma di kartu aktif. Ini menghilangkan animasi reveal/hide yang tadinya
+   ikut jalan setiap kali geser kartu (salah satu penyebab terasa kaku). */
 .showcase-card__badge{
   display: inline-block;
   font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em; font-weight: 600;
   text-transform: uppercase; color: var(--paper);
-  background: var(--terracotta); border-radius: 999px; padding: 0 12px;
+  background: var(--terracotta); border-radius: 999px; padding: 5px 12px;
   order: -1;
+  margin-bottom: 12px;
+  opacity: 0;
+  transition: opacity .3s ease;
 }
-.showcase-card.is-active .showcase-card__badge{ max-height: 28px; opacity: 1; margin-bottom: 12px; padding: 5px 12px; pointer-events: auto; }
+.showcase-card.is-active .showcase-card__badge{ opacity: 1; }
 
-.showcase-card__tagline{ color: var(--ink-soft); font-size: .95rem; }
-.showcase-card.is-active .showcase-card__tagline{ max-height: 80px; opacity: 1; margin-bottom: 18px; pointer-events: auto; }
+.showcase-card__tagline{ color: var(--ink-soft); font-size: .95rem; margin-bottom: 16px; }
 
 .showcase-card__cta{
   display: inline-flex; align-items: center; gap: 8px;
-  border-radius: 999px; padding: 0 20px;
+  border-radius: 999px; padding: 11px 20px;
   margin-top: auto;
 }
-.showcase-card.is-active .showcase-card__cta{ max-height: 50px; opacity: 1; padding: 11px 20px; margin-top: auto; pointer-events: auto; }
 
-.showcase-card__count{ font-family: var(--font-mono); font-size: 11px; color: var(--sage); }
-.showcase-card.is-active .showcase-card__count{ max-height: 20px; opacity: 1; margin-top: 10px; pointer-events: auto; }
+.showcase-card__count{ font-family: var(--font-mono); font-size: 11px; color: var(--sage); margin-top: 10px; }
 
-.showcase-card__admin-row{ display: flex; gap: 8px; }
-.showcase-card.is-active .showcase-card__admin-row{ max-height: 50px; opacity: 1; margin-top: 14px; pointer-events: auto; }
+.showcase-card__admin-row{ display: flex; gap: 8px; margin-top: 14px; }
 
 /* Ikon panah kecil — penanda "klik untuk lihat" pada kartu yang belum aktif */
 .showcase-card__peek-arrow{
@@ -240,14 +232,15 @@ button{ font-family: inherit; }
    gambarnya otomatis "mengintip"/terpotong di tepi, persis seperti referensi. */
 .showcase-card__art{
   position: relative;
-  flex: 0 0 38%;
-  min-width: 64px;
+  order: -2;
+  width: 100%;
+  min-height: 150px;
   background: linear-gradient(160deg, var(--paper-dim), var(--paper));
   background-size: cover;
   background-position: center;
   overflow: hidden;
 }
-.showcase-card.is-active .showcase-card__art{ flex-basis: 44%; min-height: 220px; }
+.showcase-card.is-active .showcase-card__art{ min-height: 190px; }
 .showcase-card__art svg{ position: absolute; inset: 0; width: 100%; height: 100%; }
 .showcase-card__art::before,
 .showcase-card__art::after{
@@ -311,20 +304,18 @@ button{ font-family: inherit; }
 
 @media (max-width: 880px){
   .chapter-showcase__track{ gap: 12px; }
-  .showcase-card{ width: 170px; }
-  .showcase-card.is-active{ width: min(560px, 88vw); }
-  .showcase-card h2{ font-size: 1.02rem; }
-  .showcase-card.is-active .showcase-card__art{ min-height: 180px; }
+  .showcase-card{ width: min(380px, 80vw); }
+  .showcase-card h2{ font-size: 1.2rem; }
 }
 
 @media (max-width: 560px){
   .chapter-showcase__track{ gap: 10px; padding: 6px 0 22px; }
-  .showcase-card{ width: 128px; }
-  .showcase-card.is-active{ width: min(420px, 90vw); }
-  .showcase-card__body{ padding: 16px 14px; }
-  .showcase-card.is-active .showcase-card__body{ padding: 22px 20px; }
-  .showcase-card h2{ font-size: .92rem; }
-  .showcase-card.is-active h2{ font-size: 1.5rem; }
+  /* 84vw (bukan mendekati 100vw) supaya tepi kartu sebelum/sesudahnya tetap
+     mengintip cukup jelas di kiri-kanan layar — inilah nuansa "swipe kartu"
+     yang diminta, bukan satu kartu penuh yang menutupi seluruh layar. */
+  .showcase-card{ width: 84vw; }
+  .showcase-card__body{ padding: 18px 16px; }
+  .showcase-card h2{ font-size: 1.1rem; }
   .showcase-nav{ display: none; } /* di mobile geser pakai swipe jari */
 }
 

@@ -33,6 +33,11 @@ function escapeHtml(str) {
 
 function chapterNumber(idx) { return String(idx + 1).padStart(2, "0"); }
 
+// render() membangun ulang seluruh DOM carousel — HANYA dipanggil saat data
+// benar-benar berubah (load awal, tambah/edit/hapus/pindah chapter). Untuk
+// sekadar berpindah kartu (swipe, klik panah, klik dot, tap kartu) JANGAN
+// panggil render() lagi — pakai goToIndex() yang cuma toggle class & animasi
+// transform, supaya tidak terasa seperti "refresh halaman" setiap geser.
 function render() {
   const showcase = document.getElementById("chapterShowcase");
 
@@ -44,9 +49,10 @@ function render() {
     return;
   }
 
-  // Semua chapter dirender penuh (kartu utuh: gambar + judul + tagline) dalam
-  // satu strip ("track") yang bisa digeser — bukan cuma 3 kartu yang ditukar.
-  // Kartu yang sedang aktif otomatis melebar & menonjol lewat class "is-active".
+  // Semua kartu chapter punya lebar yang SAMA (bukan kartu aktif melebar &
+  // kartu lain menyusut jadi secuil) — supaya chapter sebelum/sesudahnya
+  // selalu terlihat utuh (mengintip cukup besar di tepi), persis seperti
+  // swipe kartu, bukan cuma menampilkan potongan kecil.
   showcase.innerHTML = `
     <div class="chapter-showcase__viewport" id="showcaseViewport">
       <div class="chapter-showcase__track" id="showcaseTrack">
@@ -63,7 +69,18 @@ function render() {
 
   renderAddButton();
   attachEvents();
-  animateToActive();
+
+  // Posisi awal langsung ke kartu aktif tanpa animasi (baru dibangun ulang).
+  const viewport = document.getElementById("showcaseViewport");
+  const track = document.getElementById("showcaseTrack");
+  if (viewport && track) {
+    track.style.transition = "none";
+    const target = computeCenterOffset(track, viewport);
+    track.style.transform = `translateX(${target}px)`;
+    lastTrackOffset = target;
+    void track.offsetHeight;
+    track.style.transition = "";
+  }
 }
 
 function renderAddButton() {
@@ -120,26 +137,6 @@ function computeCenterOffset(track, viewport) {
   return viewportWidth / 2 - activeCenter;
 }
 
-function animateToActive() {
-  const viewport = document.getElementById("showcaseViewport");
-  const track = document.getElementById("showcaseTrack");
-  if (!viewport || !track) return;
-
-  // Langkah 1: "lompat" tanpa animasi ke posisi terakhir (DOM baru dibuat ulang,
-  // jadi mulai dari titik yang sama seperti sebelum re-render).
-  track.style.transition = "none";
-  track.style.transform = `translateX(${lastTrackOffset}px)`;
-  void track.offsetHeight; // paksa reflow supaya browser benar-benar menerapkan posisi di atas
-
-  // Langkah 2: baru animasikan secara mulus menuju posisi kartu aktif yang baru.
-  requestAnimationFrame(() => {
-    track.style.transition = "";
-    const target = computeCenterOffset(track, viewport);
-    track.style.transform = `translateX(${target}px)`;
-    lastTrackOffset = target;
-  });
-}
-
 window.addEventListener("resize", () => {
   const viewport = document.getElementById("showcaseViewport");
   const track = document.getElementById("showcaseTrack");
@@ -152,19 +149,44 @@ window.addEventListener("resize", () => {
   track.style.transition = "";
 });
 
-function setActive(idx) {
-  activeIndex = Math.max(0, Math.min(chapters.length - 1, idx));
-  render();
+/** Pindah ke kartu lain TANPA membangun ulang DOM (fix utama supaya swipe
+ *  terasa mulus, bukan seperti "refresh halaman"). Hanya: toggle class
+ *  is-active di kartu & dot yang relevan, update state tombol panah, lalu
+ *  animasikan transform track ke posisi kartu baru. */
+function goToIndex(idx, { animate = true } = {}) {
+  const newIndex = Math.max(0, Math.min(chapters.length - 1, idx));
+  const track = document.getElementById("showcaseTrack");
+  const viewport = document.getElementById("showcaseViewport");
+  if (!track || !viewport) { activeIndex = newIndex; return; }
+
+  activeIndex = newIndex;
+
+  track.querySelectorAll(".showcase-card").forEach((card) => {
+    card.classList.toggle("is-active", Number(card.dataset.idx) === activeIndex);
+  });
+  document.querySelectorAll("#showcaseDots [data-dot]").forEach((dot) => {
+    dot.classList.toggle("is-active", Number(dot.dataset.dot) === activeIndex);
+  });
+  const navPrev = document.getElementById("navPrev");
+  const navNext = document.getElementById("navNext");
+  if (navPrev) navPrev.disabled = activeIndex === 0;
+  if (navNext) navNext.disabled = activeIndex === chapters.length - 1;
+
+  const target = computeCenterOffset(track, viewport);
+  track.style.transition = animate ? "" : "none";
+  track.style.transform = `translateX(${target}px)`;
+  lastTrackOffset = target;
+  if (!animate) { void track.offsetHeight; track.style.transition = ""; }
 }
 
 function attachEvents() {
   const showcase = document.getElementById("chapterShowcase");
 
-  document.getElementById("navPrev")?.addEventListener("click", () => setActive(activeIndex - 1));
-  document.getElementById("navNext")?.addEventListener("click", () => setActive(activeIndex + 1));
+  document.getElementById("navPrev")?.addEventListener("click", () => goToIndex(activeIndex - 1));
+  document.getElementById("navNext")?.addEventListener("click", () => goToIndex(activeIndex + 1));
 
   showcase.querySelectorAll("[data-dot]").forEach((dot) => {
-    dot.addEventListener("click", () => setActive(Number(dot.dataset.dot)));
+    dot.addEventListener("click", () => goToIndex(Number(dot.dataset.dot)));
   });
 
   showcase.querySelectorAll("[data-admin-row]").forEach((row) =>
@@ -252,14 +274,12 @@ function attachDrag() {
       if (deltaX <= -SWIPE_THRESHOLD) newIndex = Math.min(chapters.length - 1, activeIndex + 1);
       else if (deltaX >= SWIPE_THRESHOLD) newIndex = Math.max(0, activeIndex - 1);
 
+      track.style.transition = "";
       if (newIndex !== activeIndex) {
-        // Simpan posisi geser saat ini supaya animasi lanjut mulus dari sini
-        // (bukan lompat balik ke posisi tengah lama dulu baru animasi).
-        lastTrackOffset = lastTrackOffset + deltaX;
-        activeIndex = newIndex;
-        render();
+        // DOM tidak dibangun ulang — hanya animasi transform yang lanjut
+        // mulus dari posisi jari terakhir menuju kartu baru.
+        requestAnimationFrame(() => goToIndex(newIndex));
       } else {
-        track.style.transition = "";
         // Tidak cukup jauh untuk pindah chapter → kembali mulus ke posisi semula.
         requestAnimationFrame(() => {
           track.style.transform = `translateX(${lastTrackOffset}px)`;
@@ -302,7 +322,7 @@ function handleTap(target) {
   if (card.classList.contains("is-active")) {
     window.location.href = card.dataset.goto;
   } else {
-    setActive(Number(card.dataset.idx));
+    goToIndex(Number(card.dataset.idx));
   }
 }
 
