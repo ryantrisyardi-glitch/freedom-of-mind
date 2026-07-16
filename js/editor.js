@@ -192,6 +192,42 @@ function toggleHighlight(color) {
   triggerChange();
 }
 
+// Dipakai khusus oleh palet warna: SELALU menerapkan warna yang dipilih,
+// tidak seperti toggleHighlight yang men-toggle (menghapus highlight kalau
+// seleksi sudah punya highlight). Sebelumnya tombol warna di palet memanggil
+// toggleHighlight — akibatnya kalau teks SUDAH ada highlight-nya, klik warna
+// lain di palet malah MENGHAPUS highlight itu (bukan menggantinya), jadi
+// terasa seperti "tidak bisa ganti warna". Sekarang: kalau seleksi sudah di
+// dalam <mark>, warnanya diganti langsung; kalau belum, baru dibungkus <mark> baru.
+function setHighlightColor(color) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount || sel.isCollapsed) return;
+
+  let node = sel.getRangeAt(0).commonAncestorContainer;
+  node = node.nodeType === 3 ? node.parentElement : node;
+  let markNode = null;
+  while (node && node !== editorEl) {
+    if (node.tagName === "MARK") { markNode = node; break; }
+    node = node.parentElement;
+  }
+
+  if (markNode) {
+    markNode.style.background = color;
+    markNode.dataset.color = color;
+    sel.removeAllRanges();
+  } else {
+    const range = sel.getRangeAt(0);
+    const mark = document.createElement("mark");
+    mark.style.background = color;
+    mark.dataset.color = color;
+    mark.appendChild(range.extractContents());
+    range.insertNode(mark);
+    sel.removeAllRanges();
+  }
+  scheduleHistoryPush();
+  triggerChange();
+}
+
 function applyTextColor(color) {
   const useColor = color || activeTextColor;
   const sel = window.getSelection();
@@ -306,7 +342,7 @@ function createColorPalette() {
         removeMarkAtSelection();
       } else {
         activeHighlightColor = val;
-        toggleHighlight(val);
+        setHighlightColor(val);
         syncHighlightUI();
       }
       hideColorPalette();
@@ -721,7 +757,9 @@ async function insertImage(position) {
     const file = input.files[0];
     if (!file) return;
     const toolbar = document.getElementById("editorToolbar");
+    const floatingBody = document.querySelector(".floating-toolbar__body");
     toolbar?.classList.add("is-busy");
+    floatingBody?.classList.add("is-busy");
     try {
       const url = await handleImageUpload(file);
       if (!url) return;
@@ -736,6 +774,7 @@ async function insertImage(position) {
       alert("Gagal mengunggah gambar: " + err.message);
     } finally {
       toolbar?.classList.remove("is-busy");
+      floatingBody?.classList.remove("is-busy");
     }
   });
   input.click();
@@ -866,6 +905,11 @@ const FLOATING_BODY_HTML = `
       <button data-fcmd="ul" title="Daftar berpoin">•</button>
       <button data-fcmd="ol" title="Daftar bernomor">1.</button>
       <button data-fcmd="divider" title="Pembatas">⋯</button>
+      <span class="floating-toolbar__sep"></span>
+      <button data-fcmd="img-left" title="Gambar di kiri, teks di kanan">🖼⇤</button>
+      <button data-fcmd="img-right" title="Gambar di kanan, teks di kiri">🖼⇥</button>
+      <button data-fcmd="img-center" title="Gambar di tengah">🖼◆</button>
+      <button data-fcmd="img-full" title="Gambar lebar penuh">🖼⬜</button>
     </div>
   </div>
 `;

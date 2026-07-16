@@ -555,6 +555,7 @@ button{ font-family: inherit; }
   position: sticky; top: 0;
 }
 .editor-toolbar.is-busy{ opacity: 0.6; pointer-events:none; }
+.floating-toolbar__body.is-busy{ opacity: 0.6; pointer-events:none; }
 .toolbar-group{ display:flex; gap:4px; align-items:center; }
 .toolbar-label{ font-family: var(--font-mono); font-size: 11px; color: var(--sage); margin-right:2px; }
 .editor-toolbar button{

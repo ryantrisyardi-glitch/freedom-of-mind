@@ -7,6 +7,7 @@ import {
   getAllAdmins, addAdmin, removeAdmin,
   getAllReaders, deleteReader,
   getPageViewStats, getPopularPages,
+  getAllNotes, updateNote,
 } from "./data.js";
 import { initAnalytics } from "./analytics.js";
 
@@ -48,10 +49,12 @@ function render() {
         tabBtn("analytics", "Analitik", "") +
         tabBtn("readers",   "Pembaca",  readers.length) +
         tabBtn("admins",    "Admin",    admins.length + 1) +
+        tabBtn("maintenance", "Perbaikan", "") +
       "</div>" +
       '<div id="adminTabContent">' +
         (activeTab === "analytics" ? renderAnalytics() :
-         activeTab === "readers"   ? renderReaders()   : renderAdmins()) +
+         activeTab === "readers"   ? renderReaders()   :
+         activeTab === "admins"    ? renderAdmins()    : renderMaintenance()) +
       "</div>" +
     "</div>";
 
@@ -68,6 +71,9 @@ function render() {
     root.querySelectorAll("[data-remove]").forEach(function(b) {
       b.addEventListener("click", function() { handleRemove(b.dataset.remove); });
     });
+  } else if (activeTab === "maintenance") {
+    var fixBtn = document.getElementById("fixDropCapBtn");
+    if (fixBtn) fixBtn.addEventListener("click", handleFixDropCaps);
   }
 }
 
@@ -295,6 +301,94 @@ function renderAdmins() {
       adminRows +
     "</div>" +
     addSection;
+}
+
+// ============================================================
+// Tab: Perbaikan (maintenance tools)
+// ============================================================
+function renderMaintenance() {
+  return '<div class="stat-section">' +
+    '<h3 class="stat-section__title">Perbaiki Drop Cap Catatan Lama</h3>' +
+    '<p style="color:var(--ink-soft);font-size:.92rem;margin:0 0 16px;max-width:560px">' +
+      "Huruf pertama besar-orange (drop cap) menyasar paragraf pertama tiap catatan. " +
+      "Catatan yang ditulis sebelum perbaikan editor mungkin paragraf pertamanya belum " +
+      "berupa <code>&lt;p&gt;</code> yang benar, jadi drop cap tidak muncul. Klik tombol di bawah " +
+      "untuk memperbaiki SEMUA catatan sekaligus (isi tulisan tidak berubah, hanya strukturnya)." +
+    "</p>" +
+    '<button class="btn btn-primary" id="fixDropCapBtn">Perbaiki Drop Cap Semua Catatan</button>' +
+    '<div id="fixDropCapResult" style="margin-top:12px;font-size:.88rem;color:var(--ink-soft)"></div>' +
+  "</div>";
+}
+
+// Versi standalone dari normalisasi di editor.js (tanpa contenteditable) —
+// membungkus teks/elemen yang belum jadi <p> di awal catatan jadi <p> asli,
+// dan mengubah <div> pertama jadi <p>, supaya selector CSS `p:first-of-type`
+// (drop cap) selalu punya target.
+function fixDropCapHtml(html) {
+  const container = document.createElement("div");
+  container.innerHTML = html || "";
+  const BLOCK_TAGS = new Set(["P", "H2", "H3", "BLOCKQUOTE", "UL", "OL", "FIGURE", "DIV", "HR"]);
+  const isBlock = (n) => n.nodeType === 1 && BLOCK_TAGS.has(n.tagName);
+
+  const firstNode = container.firstChild;
+  if (!firstNode) return { html: html || "", changed: false };
+
+  if (!isBlock(firstNode)) {
+    const p = document.createElement("p");
+    let node = firstNode;
+    while (node && !isBlock(node)) {
+      const next = node.nextSibling;
+      p.appendChild(node);
+      node = next;
+    }
+    container.insertBefore(p, node);
+    return { html: container.innerHTML, changed: true };
+  }
+
+  if (firstNode.tagName === "DIV") {
+    const p = document.createElement("p");
+    p.innerHTML = firstNode.innerHTML;
+    container.replaceChild(p, firstNode);
+    return { html: container.innerHTML, changed: true };
+  }
+
+  return { html: html || "", changed: false };
+}
+
+async function handleFixDropCaps() {
+  var ok = await showConfirm(
+    "Perbaiki struktur paragraf pertama (drop cap) untuk SEMUA catatan? " +
+    "Ini aman — isi tulisan tidak berubah, hanya strukturnya."
+  );
+  if (!ok) return;
+
+  var btn = document.getElementById("fixDropCapBtn");
+  var resultEl = document.getElementById("fixDropCapResult");
+  if (btn) { btn.disabled = true; btn.textContent = "Memproses..."; }
+  if (resultEl) resultEl.textContent = "";
+
+  try {
+    var allNotes = await getAllNotes();
+    var fixed = 0;
+    for (var i = 0; i < allNotes.length; i++) {
+      var n = allNotes[i];
+      var result = fixDropCapHtml(n.contentHtml || "");
+      if (result.changed) {
+        await updateNote(n.id, { contentHtml: result.html });
+        fixed++;
+      }
+      if (resultEl) resultEl.textContent = "Memproses... " + (i + 1) + "/" + allNotes.length;
+    }
+    if (resultEl) {
+      resultEl.textContent = fixed > 0
+        ? "Selesai — " + fixed + " dari " + allNotes.length + " catatan diperbaiki."
+        : "Selesai — semua catatan (" + allNotes.length + ") sudah OK, tidak ada yang perlu diperbaiki.";
+    }
+  } catch (err) {
+    if (resultEl) resultEl.textContent = "Gagal: " + (err.message || err);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Perbaiki Drop Cap Semua Catatan"; }
+  }
 }
 
 // ============================================================
