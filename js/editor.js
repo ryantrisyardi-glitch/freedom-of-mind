@@ -156,22 +156,35 @@ const TEXT_COLORS = [
 let activeHighlightColor = HIGHLIGHT_COLORS[0].value;
 let activeTextColor = TEXT_COLORS[0].value;
 
-function removeMarkAtSelection() {
+// Cari <mark> yang membungkus posisi kursor/seleksi saat ini (baik seleksi
+// aktif teksnya di-drag, MAUPUN kursor cuma "diklik" / diletakkan di dalam
+// teks yang sudah di-highlight tanpa memilih apa pun). Ini penting supaya
+// tombol hapus/ganti warna highlight tetap berfungsi walau user tidak
+// men-drag seleksi — cukup taruh kursor di dalam kata yang sudah di-highlight.
+function findMarkAtSelection() {
   const sel = window.getSelection();
-  if (!sel.rangeCount) return false;
+  if (!sel.rangeCount) return null;
   let node = sel.getRangeAt(0).commonAncestorContainer;
   node = node.nodeType === 3 ? node.parentElement : node;
   while (node && node !== editorEl) {
-    if (node.tagName === "MARK") {
-      const parent = node.parentNode;
-      while (node.firstChild) parent.insertBefore(node.firstChild, node);
-      parent.removeChild(node);
-      sel.removeAllRanges();
-      scheduleHistoryPush();
-      triggerChange();
-      return true;
-    }
+    if (node.tagName === "MARK") return node;
     node = node.parentElement;
+  }
+  return null;
+}
+
+function removeMarkAtSelection() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return false;
+  const node = findMarkAtSelection();
+  if (node) {
+    const parent = node.parentNode;
+    while (node.firstChild) parent.insertBefore(node.firstChild, node);
+    parent.removeChild(node);
+    sel.removeAllRanges();
+    scheduleHistoryPush();
+    triggerChange();
+    return true;
   }
   return false;
 }
@@ -179,7 +192,13 @@ function removeMarkAtSelection() {
 function toggleHighlight(color) {
   const useColor = color || activeHighlightColor;
   const sel = window.getSelection();
-  if (!sel.rangeCount || sel.isCollapsed) return;
+  if (!sel.rangeCount) return;
+  // Kursor (tanpa seleksi teks) diletakkan di dalam highlight yang sudah ada
+  // → toggle berarti menghapus highlight tersebut.
+  if (sel.isCollapsed) {
+    removeMarkAtSelection();
+    return;
+  }
   if (removeMarkAtSelection()) return;
   const range = sel.getRangeAt(0);
   const mark = document.createElement("mark");
@@ -201,15 +220,13 @@ function toggleHighlight(color) {
 // dalam <mark>, warnanya diganti langsung; kalau belum, baru dibungkus <mark> baru.
 function setHighlightColor(color) {
   const sel = window.getSelection();
-  if (!sel.rangeCount || sel.isCollapsed) return;
+  if (!sel.rangeCount) return;
 
-  let node = sel.getRangeAt(0).commonAncestorContainer;
-  node = node.nodeType === 3 ? node.parentElement : node;
-  let markNode = null;
-  while (node && node !== editorEl) {
-    if (node.tagName === "MARK") { markNode = node; break; }
-    node = node.parentElement;
-  }
+  const markNode = findMarkAtSelection();
+
+  // Tidak ada seleksi teks (kursor cuma diletakkan) DAN tidak sedang di
+  // dalam highlight yang ada → tidak ada apa pun untuk diwarnai, berhenti.
+  if (!markNode && sel.isCollapsed) return;
 
   if (markNode) {
     markNode.style.background = color;

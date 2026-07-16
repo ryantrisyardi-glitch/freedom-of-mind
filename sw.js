@@ -6,7 +6,15 @@
 // supaya kontennya selalu yang terbaru.
 // =========================================================
 
-const CACHE_NAME = "fom-shell-v1";
+// PENTING: naikkan angka versi ini SETIAP KALI ada perubahan pada file-file
+// di SHELL_FILES (terutama file .js). Service worker ini cache-first untuk
+// app shell, jadi kalau versi tidak dinaikkan, browser/HP yang sudah pernah
+// membuka situs ini akan terus memakai file JS versi LAMA dari cache walau
+// filenya sudah diganti di server — inilah penyebab error
+// "does not provide an export named 'backupAllData'": admin.html memuat
+// admin-page.js versi baru, tapi data.js yang dipanggilnya masih versi lama
+// dari cache (belum punya fungsi backupAllData/restoreAllData).
+const CACHE_NAME = "fom-shell-v2";
 
 const SHELL_FILES = [
   "./",
@@ -62,19 +70,25 @@ self.addEventListener("fetch", (event) => {
   const isSameOrigin = url.origin === self.location.origin;
   if (!isSameOrigin) return;
 
-  // App shell: cache-first, lalu update di background ("stale-while-revalidate")
+  // App shell: network-first, fallback ke cache kalau offline.
+  // (Sebelumnya cache-first + update di background — masalahnya, kalau ada
+  // file baru dideploy, tab yang sudah terbuka/PWA yang sudah ke-install
+  // tetap langsung dapat file LAMA dari cache dulu, baru versi baru dipakai
+  // di reload BERIKUTNYA. Kalau dua file yang saling terhubung — misalnya
+  // data.js & admin-page.js — sempat "kejeda" satu update-siklus, keduanya
+  // bisa tidak sinkron dan menyebabkan error seperti
+  // "does not provide an export named ...". Network-first memastikan versi
+  // terbaru dipakai kapan pun ada koneksi, dan cache cuma jadi cadangan
+  // waktu offline.)
   event.respondWith(
-    caches.match(req).then((cached) => {
-      const network = fetch(req)
-        .then((res) => {
-          if (res && res.status === 200) {
-            const copy = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    fetch(req)
+      .then((res) => {
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(req))
   );
 });
