@@ -29,6 +29,7 @@ import {
   onSnapshot,
   serverTimestamp,
   increment,
+  Timestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 export const QUICK_NOTES_NAME = "Quick Notes";
@@ -334,3 +335,104 @@ export async function getPopularPages(limitN = 15) {
 }
 
 export { increment };
+
+// =========================================================
+// BACKUP & RESTORE — seluruh chapter + catatan (publish, draft,
+// maupun yang ada di Trash), untuk jaga-jaga kalau Firestore
+// bermasalah / ter-hack / terhapus tanpa sengaja.
+// =========================================================
+
+/** Ambil SEMUA chapter apa adanya (termasuk yang di Trash), tanpa filter. */
+async function getAllChaptersRaw() {
+  const snap = await getDocs(collection(db, "chapters"));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/** Ambil SEMUA catatan apa adanya (draft, published, maupun di Trash). */
+async function getAllNotesRaw() {
+  const snap = await getDocs(collection(db, "notes"));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+// Firestore Timestamp tidak bisa langsung disimpan sebagai JSON — dikonversi
+// dulu ke penanda { __ts__: "<ISO string>" }, dan dikembalikan lagi jadi
+// Timestamp asli saat restore.
+function serializeForBackup(value) {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "object" && typeof value.toDate === "function") {
+    return { __ts__: value.toDate().toISOString() };
+  }
+  if (Array.isArray(value)) return value.map(serializeForBackup);
+  if (typeof value === "object") {
+    const out = {};
+    for (const k of Object.keys(value)) out[k] = serializeForBackup(value[k]);
+    return out;
+  }
+  return value;
+}
+
+function deserializeFromBackup(value) {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map(deserializeFromBackup);
+  if (typeof value === "object") {
+    const keys = Object.keys(value);
+    if (keys.length === 1 && keys[0] === "__ts__") {
+      return Timestamp.fromDate(new Date(value.__ts__));
+    }
+    const out = {};
+    for (const k of keys) out[k] = deserializeFromBackup(value[k]);
+    return out;
+  }
+  return value;
+}
+
+/**
+ * Buat satu snapshot backup lengkap (semua chapter + semua catatan, apa pun
+ * statusnya) dalam bentuk objek yang siap di-JSON.stringify dan diunduh.
+ */
+export async function backupAllData() {
+  const [chapters, notes] = await Promise.all([getAllChaptersRaw(), getAllNotesRaw()]);
+  return {
+    app: "freedom-of-mind",
+    kind: "full-backup",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    counts: { chapters: chapters.length, notes: notes.length },
+    chapters: serializeForBackup(chapters),
+    notes: serializeForBackup(notes),
+  };
+}
+
+/**
+ * Pulihkan chapter + catatan dari objek backup (hasil backupAllData / file
+ * JSON yang diunduh sebelumnya). Setiap dokumen ditulis kembali dengan ID
+ * ASLI-nya (setDoc replace penuh, bukan merge), jadi persis seperti kondisi
+ * saat backup dibuat. Dokumen yang saat ini ada di Firestore tapi TIDAK ada
+ * di file backup TIDAK disentuh/dihapus — restore ini bersifat menambah &
+ * menimpa berdasarkan ID, bukan mengganti seluruh koleksi.
+ * onProgress(done, total) dipanggil setelah tiap dokumen selesai ditulis.
+ */
+export async function restoreAllData(backup, onProgress) {
+  if (!backup || !Array.isArray(backup.chapters) || !Array.isArray(backup.notes)) {
+    throw new Error("Format file backup tidak dikenali (harus hasil dari fitur Backup di sini).");
+  }
+  const total = backup.chapters.length + backup.notes.length;
+  let done = 0;
+
+  for (const c of backup.chapters) {
+    const { id, ...rest } = c;
+    if (!id) continue;
+    await setDoc(doc(db, "chapters", id), deserializeFromBackup(rest));
+    done++;
+    if (onProgress) onProgress(done, total);
+  }
+  for (const n of backup.notes) {
+    const { id, ...rest } = n;
+    if (!id) continue;
+    await setDoc(doc(db, "notes", id), deserializeFromBackup(rest));
+    done++;
+    if (onProgress) onProgress(done, total);
+  }
+
+  return { chaptersRestored: backup.chapters.length, notesRestored: backup.notes.length };
+}

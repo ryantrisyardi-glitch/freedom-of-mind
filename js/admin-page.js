@@ -8,6 +8,7 @@ import {
   getAllReaders, deleteReader,
   getPageViewStats, getPopularPages,
   getAllNotes, updateNote,
+  backupAllData, restoreAllData,
 } from "./data.js";
 import { initAnalytics } from "./analytics.js";
 
@@ -74,6 +75,10 @@ function render() {
   } else if (activeTab === "maintenance") {
     var fixBtn = document.getElementById("fixDropCapBtn");
     if (fixBtn) fixBtn.addEventListener("click", handleFixDropCaps);
+    var backupBtn = document.getElementById("backupBtn");
+    if (backupBtn) backupBtn.addEventListener("click", handleBackup);
+    var restoreInput = document.getElementById("restoreFileInput");
+    if (restoreInput) restoreInput.addEventListener("change", handleRestoreFileChosen);
   }
 }
 
@@ -308,6 +313,33 @@ function renderAdmins() {
 // ============================================================
 function renderMaintenance() {
   return '<div class="stat-section">' +
+    '<h3 class="stat-section__title">Backup &amp; Restore</h3>' +
+    '<p style="color:var(--ink-soft);font-size:.92rem;margin:0 0 16px;max-width:560px">' +
+      "Cadangkan SEMUA chapter dan catatan (yang sudah publish, masih draft, maupun yang ada di Trash) " +
+      "jadi satu file JSON yang bisa kamu simpan sendiri (misalnya di Google Drive/laptop). " +
+      "Kalau suatu saat Firestore bermasalah atau data hilang, file ini bisa dipakai untuk memulihkan semuanya kembali." +
+    "</p>" +
+    '<div class="backup-restore-row">' +
+      '<div class="backup-restore-box">' +
+        "<h4>Backup</h4>" +
+        '<p>Unduh semua chapter &amp; catatan sebagai satu file <code>.json</code>.</p>' +
+        '<button class="btn btn-primary" id="backupBtn">⬇ Download Backup</button>' +
+        '<div id="backupResult" class="backup-restore-status"></div>' +
+      "</div>" +
+      '<div class="backup-restore-box">' +
+        "<h4>Restore</h4>" +
+        '<p>Pulihkan dari file backup <code>.json</code> yang pernah diunduh. ' +
+          "Chapter/catatan dengan ID yang sama akan ditimpa sesuai isi file; " +
+          "yang tidak ada di file backup tidak akan dihapus.</p>" +
+        '<label class="btn" style="display:inline-block;cursor:pointer">' +
+          "📤 Pilih File Backup" +
+          '<input type="file" id="restoreFileInput" accept="application/json,.json" style="display:none">' +
+        "</label>" +
+        '<div id="restoreResult" class="backup-restore-status"></div>' +
+      "</div>" +
+    "</div>" +
+  "</div>" +
+  '<div class="stat-section">' +
     '<h3 class="stat-section__title">Perbaiki Drop Cap Catatan Lama</h3>' +
     '<p style="color:var(--ink-soft);font-size:.92rem;margin:0 0 16px;max-width:560px">' +
       "Huruf pertama besar-orange (drop cap) menyasar paragraf pertama tiap catatan. " +
@@ -353,6 +385,80 @@ function fixDropCapHtml(html) {
   }
 
   return { html: html || "", changed: false };
+}
+
+async function handleBackup() {
+  var btn = document.getElementById("backupBtn");
+  var resultEl = document.getElementById("backupResult");
+  if (btn) { btn.disabled = true; btn.textContent = "Menyiapkan backup..."; }
+  if (resultEl) resultEl.textContent = "";
+  try {
+    var backup = await backupAllData();
+    var json = JSON.stringify(backup, null, 2);
+    var blob = new Blob([json], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "freedom-of-mind-backup-" + stamp + ".json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    if (resultEl) {
+      resultEl.textContent = "Selesai — " + backup.counts.chapters + " chapter, " +
+        backup.counts.notes + " catatan berhasil dicadangkan.";
+    }
+  } catch (err) {
+    if (resultEl) resultEl.textContent = "Gagal membuat backup: " + (err.message || err);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "⬇ Download Backup"; }
+  }
+}
+
+function handleRestoreFileChosen(e) {
+  var file = e.target.files && e.target.files[0];
+  e.target.value = ""; // supaya bisa pilih file yang sama lagi nanti
+  if (!file) return;
+
+  var reader = new FileReader();
+  reader.onload = async function() {
+    var resultEl = document.getElementById("restoreResult");
+    var backup;
+    try {
+      backup = JSON.parse(reader.result);
+    } catch (err) {
+      if (resultEl) resultEl.textContent = "File bukan JSON yang valid.";
+      return;
+    }
+    if (!backup || !Array.isArray(backup.chapters) || !Array.isArray(backup.notes)) {
+      if (resultEl) resultEl.textContent = "File ini bukan hasil Backup dari fitur ini.";
+      return;
+    }
+
+    var when = backup.exportedAt ? new Date(backup.exportedAt).toLocaleString("id-ID") : "tidak diketahui";
+    var ok = await showConfirm(
+      "File backup ini dibuat pada " + when + ", berisi " + backup.chapters.length +
+      " chapter dan " + backup.notes.length + " catatan.\n\n" +
+      "Chapter/catatan dengan ID yang sama di Firestore akan DITIMPA sesuai isi file ini. " +
+      "Data yang tidak ada di file backup tidak akan dihapus. Lanjutkan restore?"
+    );
+    if (!ok) return;
+
+    if (resultEl) resultEl.textContent = "Memproses restore...";
+    try {
+      var result = await restoreAllData(backup, function(done, total) {
+        if (resultEl) resultEl.textContent = "Memproses restore... " + done + "/" + total;
+      });
+      if (resultEl) {
+        resultEl.textContent = "Selesai — " + result.chaptersRestored + " chapter, " +
+          result.notesRestored + " catatan berhasil dipulihkan.";
+      }
+    } catch (err) {
+      if (resultEl) resultEl.textContent = "Gagal restore: " + (err.message || err);
+    }
+  };
+  reader.readAsText(file);
 }
 
 async function handleFixDropCaps() {
