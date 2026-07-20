@@ -188,11 +188,24 @@ export async function moveNoteToChapter(noteId, newChapterId) {
   return updateDoc(doc(db, "notes", noteId), { chapterId: newChapterId, updatedAt: serverTimestamp() });
 }
 
-/** Publish: ubah status menjadi 'published' dan catat waktu publish */
-export async function publishNote(noteId) {
+/**
+ * Publish: ubah status menjadi 'published' dan catat waktu publish.
+ * publishDate opsional: Date/string yang dipilih editor secara manual.
+ * Jika tidak diisi, gunakan waktu publish sekarang (server time).
+ */
+export async function publishNote(noteId, publishDate) {
+  const publishedAt = publishDate ? Timestamp.fromDate(new Date(publishDate)) : serverTimestamp();
   return updateDoc(doc(db, "notes", noteId), {
     status: "published",
-    publishedAt: serverTimestamp(),
+    publishedAt,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** Ubah tanggal publish yang sudah ada (tanpa mengubah status). */
+export async function setPublishedDate(noteId, publishDate) {
+  return updateDoc(doc(db, "notes", noteId), {
+    publishedAt: Timestamp.fromDate(new Date(publishDate)),
     updatedAt: serverTimestamp(),
   });
 }

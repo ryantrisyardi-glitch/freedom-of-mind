@@ -4,7 +4,7 @@
 
 import { initAnalytics } from "./analytics.js";
 import { initApp, onAuthReady, currentUser, currentIsAdmin } from "./ui-shared.js";
-import { getNote, updateNote, getChapter, getAllChapters, moveNoteToChapter, publishNote, unpublishNote } from "./data.js";
+import { getNote, updateNote, getChapter, getAllChapters, moveNoteToChapter, publishNote, unpublishNote, setPublishedDate } from "./data.js";
 import { initEditor, getEditorHtml } from "./editor.js";
 
 function getNoteId() {
@@ -12,6 +12,13 @@ function getNoteId() {
 }
 function escapeHtml(str) {
   return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function toDateInputValue(ts) {
+  if (!ts) return "";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  if (isNaN(d)) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 let note, chapter, allChapters = [];
@@ -27,13 +34,18 @@ function updatePublishBar() {
   const isDraft = !note.status || note.status === "draft";
   const bar = document.getElementById("publishBar");
   if (!bar) return;
+  const dateValue = toDateInputValue(note.publishedAt || note.createdAt) || toDateInputValue(new Date());
   bar.innerHTML = `
     <div class="publish-bar__status ${isDraft ? "publish-bar__status--draft" : "publish-bar__status--published"}">
       ${isDraft
         ? "📝 <strong>Draft</strong> — hanya kamu yang bisa melihat tulisan ini"
         : "🌿 <strong>Published</strong> — tulisan sudah tayang dan bisa dibaca publik"}
     </div>
-    <div style="display:flex;gap:8px;align-items:center;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;color:var(--ink-muted);">
+        Tanggal publish:
+        <input type="date" id="publishDateInput" class="btn" value="${dateValue}">
+      </label>
       <a class="btn" href="note.html?id=${note.id}" target="_blank" title="Preview tulisan">👁 Preview</a>
       ${isDraft
         ? `<button class="btn btn-publish" id="publishBtn">Publish →</button>`
@@ -43,11 +55,12 @@ function updatePublishBar() {
 
   document.getElementById("publishBtn")?.addEventListener("click", async () => {
     const btn = document.getElementById("publishBtn");
+    const dateInput = document.getElementById("publishDateInput");
     btn.disabled = true;
     btn.textContent = "Mempublish…";
     try {
       if (saveTimeout) { clearTimeout(saveTimeout); await doSave(); }
-      await publishNote(note.id);
+      await publishNote(note.id, dateInput?.value || null);
       note.status = "published";
       updatePublishBar();
       setStatus("dipublish ✓ · " + new Date().toLocaleTimeString("id-ID"));
@@ -71,6 +84,18 @@ function updatePublishBar() {
       alert("Gagal: " + err.message);
       btn.disabled = false;
       btn.textContent = "↩ Kembali ke Draft";
+    }
+  });
+
+  document.getElementById("publishDateInput")?.addEventListener("change", async (e) => {
+    const val = e.target.value;
+    if (!val) return;
+    try {
+      await setPublishedDate(note.id, val);
+      note.publishedAt = new Date(val);
+      setStatus("tanggal publish diperbarui ✓");
+    } catch (err) {
+      alert("Gagal mengubah tanggal publish: " + err.message);
     }
   });
 }

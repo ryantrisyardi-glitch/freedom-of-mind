@@ -215,7 +215,7 @@ async function init() {
     ${draftBannerHtml}
     ${adminBarHtml}
     <div class="note-page__meta">
-      <span>${formatTanggal(note.updatedAt)}</span>
+      <span>${formatTanggal(note.publishedAt || note.createdAt)}</span>
       ${tagsHtml ? `<span>${tagsHtml}</span>` : ""}
     </div>
     <h1>${escapeHtml(note.judul)}</h1>

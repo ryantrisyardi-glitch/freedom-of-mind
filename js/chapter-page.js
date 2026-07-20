@@ -87,7 +87,7 @@ function render() {
         <div class="note-row__main">
           <h3><a href="note.html?id=${n.id}" class="card-link">${escapeHtml(n.judul)}</a> ${draftBadge}</h3>
           <div class="note-row__meta">
-            <span>${formatTanggal(n.updatedAt)}</span>
+            <span>${formatTanggal(n.publishedAt || n.createdAt)}</span>
             <div class="note-row__tags">${(n.tag || []).map((t) => `<span>#${escapeHtml(t)}</span>`).join("")}</div>
           </div>
         </div>

@@ -282,16 +282,13 @@ function handlePaste(e) {
   e.preventDefault();
   const cd = e.clipboardData || window.clipboardData;
   if (!cd) return;
-  const html = cd.getData("text/html");
+  // Paste selalu sebagai teks polos saja — tanpa bold/italic/warna/font/link/
+  // list, dsb ikut dari Word/Google Docs/situs lain. Ambil text/plain saja;
+  // HTML dari clipboard sengaja tidak dipakai sama sekali.
   const text = cd.getData("text/plain");
   editorEl.focus();
 
-  if (html) {
-    const temp = document.createElement("div");
-    temp.innerHTML = html;
-    sanitizePastedFragment(temp);
-    document.execCommand("insertHTML", false, temp.innerHTML);
-  } else if (text) {
+  if (text) {
     document.execCommand("insertText", false, text);
   }
 
@@ -432,7 +429,7 @@ function showColorPalette(x, y) {
     if (top + ph > vh - 8) top = vh - ph - 8;
 
     colorPaletteEl.style.left = left + "px";
-    colorPaletteEl.style.top = top + window.scrollY + "px";
+    colorPaletteEl.style.top = top + "px";
   });
 }
 
