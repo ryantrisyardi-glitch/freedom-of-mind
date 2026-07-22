@@ -3,7 +3,7 @@
 // =========================================================
 
 import { initAnalytics } from "./analytics.js";
-import { initApp, onAuthReady, currentIsAdmin, showModal, showChoice } from "./ui-shared.js";
+import { initApp, onAuthReady, currentIsAdmin, showModal, showChoice, createUploadProgress } from "./ui-shared.js";
 import { getAllChapters, createChapter, updateChapter, deleteChapter, getAllNotes, QUICK_NOTES_NAME, uploadToCloudinary } from "./data.js";
 import { defaultChapterArt } from "./chapter-art.js";
 
@@ -371,13 +371,15 @@ function enhanceCoverImageField() {
     if (!file) return;
     uploadBtn.disabled = true;
     uploadBtn.textContent = "Mengunggah…";
+    const progress = createUploadProgress(wrap, "Mengunggah gambar sampul…");
     try {
-      input.value = await uploadToCloudinary(file);
+      input.value = await uploadToCloudinary(file, (percent) => progress.update(percent));
     } catch (err) {
       alert("Gagal upload: " + err.message);
     } finally {
       uploadBtn.disabled = false;
       uploadBtn.textContent = "Upload";
+      progress.remove();
     }
   });
 }

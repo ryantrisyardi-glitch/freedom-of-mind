@@ -233,21 +233,53 @@ export async function getNotesByChapterForAdmin(chapterId) {
 
 // ---------- Cloudinary Upload ----------
 
-export async function uploadToCloudinary(file) {
+/**
+ * Upload gambar ke Cloudinary.
+ * @param {File} file
+ * @param {(percent:number)=>void} [onProgress] - dipanggil berkala dengan angka 0-100
+ *   selama proses unggah berlangsung (dipakai untuk progress bar di UI).
+ */
+export function uploadToCloudinary(file, onProgress) {
   const cfg = window.CLOUDINARY_CONFIG;
   if (!cfg || cfg.cloudName === "GANTI_CLOUD_NAME") {
-    throw new Error("Cloudinary belum dikonfigurasi. Lihat README.md.");
+    return Promise.reject(new Error("Cloudinary belum dikonfigurasi. Lihat README.md."));
   }
-  if (file.size > 8 * 1024 * 1024) throw new Error("Ukuran gambar maksimal 8 MB.");
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("upload_preset", cfg.uploadPreset);
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${cfg.cloudName}/image/upload`, {
-    method: "POST", body: fd,
+  if (file.size > 8 * 1024 * 1024) {
+    return Promise.reject(new Error("Ukuran gambar maksimal 8 MB."));
+  }
+
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("upload_preset", cfg.uploadPreset);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `https://api.cloudinary.com/v1_1/${cfg.cloudName}/image/upload`);
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (!onProgress) return;
+      if (e.lengthComputable) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    });
+
+    xhr.onload = () => {
+      let data;
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        data = {};
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(100);
+        resolve(data.secure_url);
+      } else {
+        reject(new Error(data.error?.message || "Upload gagal"));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Upload gagal — periksa koneksi internet."));
+    xhr.send(fd);
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || "Upload gagal");
-  return data.secure_url;
 }
 
 // ---------- Comments ----------

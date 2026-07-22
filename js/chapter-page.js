@@ -3,7 +3,7 @@
 // =========================================================
 
 import { initAnalytics, updateAnalyticsTitle } from "./analytics.js";
-import { initApp, onAuthReady, currentIsAdmin, showModal, showConfirm } from "./ui-shared.js";
+import { initApp, onAuthReady, currentIsAdmin, showModal, showConfirm, createUploadProgress } from "./ui-shared.js";
 import { getChapter, getNotesByChapter, getNotesByChapterForAdmin, createNote, deleteNote, updateNote, uploadToCloudinary } from "./data.js";
 import { defaultChapterArt } from "./chapter-art.js";
 
@@ -224,9 +224,10 @@ async function handleCoverUpload(noteId, btn) {
     const thumbnail = btn.closest(".note-row__thumbnail");
     btn.disabled = true;
     btn.textContent = "…";
+    const progress = createUploadProgress(btn, "");
 
     try {
-      const url = await uploadToCloudinary(file);
+      const url = await uploadToCloudinary(file, (percent) => progress.update(percent));
       await updateNote(noteId, { coverImage: url });
 
       // Update local notes array
@@ -253,6 +254,7 @@ async function handleCoverUpload(noteId, btn) {
       btn.textContent = "＋";
     } finally {
       btn.disabled = false;
+      progress.remove();
     }
   });
   input.click();

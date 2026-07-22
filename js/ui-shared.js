@@ -4,6 +4,11 @@
 // =========================================================
 
 import { initFirebaseCore, auth, watchAuth, googleSignIn, signOut, checkIsAdmin } from "./firebase-core.js";
+import { applyStoredTheme, initThemeSwitcher } from "./theme.js";
+
+// Terapkan tema tersimpan sesegera mungkin, sebelum initApp() dipanggil,
+// supaya tidak ada "kedipan" warna default sesaat sebelum tema custom aktif.
+applyStoredTheme();
 
 export let currentUser = null;
 export let currentIsAdmin = false;
@@ -36,6 +41,8 @@ function renderTopnav() {
   const slot = document.getElementById("topnavActions");
   if (!slot) return;
 
+  initThemeSwitcher();
+
   if (!currentUser) {
     slot.innerHTML = `<button class="btn" id="navSignIn">Masuk dengan Google</button>`;
     const btn = document.getElementById("navSignIn");
@@ -57,6 +64,34 @@ function renderTopnav() {
     <button class="btn-text" id="navSignOut">keluar</button>
   `;
   document.getElementById("navSignOut")?.addEventListener("click", () => signOut());
+}
+
+/**
+ * Membuat elemen progress bar kecil untuk proses upload gambar, dan
+ * menyisipkannya tepat setelah `anchorEl` di DOM.
+ * Mengembalikan { update(percent), remove() }.
+ */
+export function createUploadProgress(anchorEl, label = "Mengunggah gambar…") {
+  const el = document.createElement("div");
+  el.className = "upload-progress";
+  el.innerHTML = `
+    <span class="upload-progress__label">${label}</span>
+    <span class="upload-progress__track"><span class="upload-progress__fill"></span></span>
+    <span class="upload-progress__pct">0%</span>
+  `;
+  anchorEl?.insertAdjacentElement("afterend", el);
+  const fill = el.querySelector(".upload-progress__fill");
+  const pct = el.querySelector(".upload-progress__pct");
+  return {
+    update(percent) {
+      const p = Math.max(0, Math.min(100, Math.round(percent)));
+      fill.style.width = p + "%";
+      pct.textContent = p + "%";
+    },
+    remove() {
+      el.remove();
+    },
+  };
 }
 
 /**

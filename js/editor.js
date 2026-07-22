@@ -7,6 +7,7 @@
 // =========================================================
 
 import { uploadToCloudinary } from "./data.js";
+import { createUploadProgress } from "./ui-shared.js";
 
 let editorEl = null;
 let onChangeCallback = null;
@@ -759,8 +760,8 @@ function buildImageFigure(url, position) {
   return figure;
 }
 
-async function handleImageUpload(file) {
-  return uploadToCloudinary(file);
+async function handleImageUpload(file, progress) {
+  return uploadToCloudinary(file, (percent) => progress?.update(percent));
 }
 
 async function insertImage(position) {
@@ -774,8 +775,9 @@ async function insertImage(position) {
     const floatingBody = document.querySelector(".floating-toolbar__body");
     toolbar?.classList.add("is-busy");
     floatingBody?.classList.add("is-busy");
+    const progress = createUploadProgress(toolbar || floatingBody, "Mengunggah gambar…");
     try {
-      const url = await handleImageUpload(file);
+      const url = await handleImageUpload(file, progress);
       if (!url) return;
       const figure = buildImageFigure(url, position);
       insertNodeAtCursor(figure);
@@ -789,6 +791,7 @@ async function insertImage(position) {
     } finally {
       toolbar?.classList.remove("is-busy");
       floatingBody?.classList.remove("is-busy");
+      progress.remove();
     }
   });
   input.click();
