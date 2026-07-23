@@ -92,7 +92,7 @@ export const SPACINGS = [
   { id: "loose", name: "Sangat Lega", em: 2.4 },
 ];
 
-function getStoredSpacingId() {
+export function getStoredSpacingId() {
   try {
     return localStorage.getItem(SPACING_KEY) || "normal";
   } catch {
@@ -100,7 +100,7 @@ function getStoredSpacingId() {
   }
 }
 
-function storeSpacingId(id) {
+export function storeSpacingId(id) {
   try {
     localStorage.setItem(SPACING_KEY, id);
   } catch {
@@ -159,9 +159,9 @@ export function applyStoredTheme() {
   return applyTheme(getStoredThemeId());
 }
 
-function buildSwitcherMarkup(activeId, activeSpacingId) {
+function buildSwitcherMarkup(activeId) {
   return `
-    <button type="button" class="theme-switcher__btn" id="themeSwitcherBtn" title="Pengaturan tampilan" aria-haspopup="true" aria-expanded="false">
+    <button type="button" class="theme-switcher__btn" id="themeSwitcherBtn" title="Ganti tema tampilan" aria-haspopup="true" aria-expanded="false">
       <span class="theme-switcher__icon">🎨</span>
     </button>
     <div class="theme-switcher__panel" id="themeSwitcherPanel" hidden>
@@ -180,20 +180,6 @@ function buildSwitcherMarkup(activeId, activeSpacingId) {
           </button>
         `).join("")}
       </div>
-
-      <div class="theme-switcher__panel-title" style="margin-top:12px;">Jarak antar paragraf</div>
-      <div class="theme-switcher__list theme-switcher__list--spacing">
-        ${SPACINGS.map((s) => `
-          <button type="button" class="spacing-option ${s.id === activeSpacingId ? "is-active" : ""}" data-spacing-id="${s.id}" title="${s.name}">
-            <span class="spacing-option__bars">
-              <span style="height:${Math.round(s.em * 5)}px"></span>
-            </span>
-            <span class="spacing-option__name">${s.name}</span>
-            ${s.id === activeSpacingId ? `<span class="theme-option__check">✓</span>` : ""}
-          </button>
-        `).join("")}
-      </div>
-
       <div class="theme-switcher__note">Pilihan ini hanya disimpan di browser ini.</div>
     </div>
   `;
@@ -217,8 +203,7 @@ export function initThemeSwitcher() {
   }
 
   const activeId = document.documentElement.getAttribute("data-theme") || getStoredThemeId();
-  const activeSpacingId = document.documentElement.getAttribute("data-p-spacing") || getStoredSpacingId();
-  mount.innerHTML = buildSwitcherMarkup(activeId, activeSpacingId);
+  mount.innerHTML = buildSwitcherMarkup(activeId);
 
   const btn = document.getElementById("themeSwitcherBtn");
   const panel = document.getElementById("themeSwitcherPanel");
@@ -243,15 +228,6 @@ export function initThemeSwitcher() {
       applyTheme(id);
       storeThemeId(id);
       initThemeSwitcher(); // re-render supaya centang/aktif pindah
-      closePanel();
-    });
-  });
-  panel.querySelectorAll(".spacing-option").forEach((opt) => {
-    opt.addEventListener("click", () => {
-      const id = opt.dataset.spacingId;
-      applySpacing(id);
-      storeSpacingId(id);
-      initThemeSwitcher();
       closePanel();
     });
   });

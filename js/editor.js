@@ -8,6 +8,7 @@
 
 import { uploadToCloudinary } from "./data.js";
 import { showGlobalUploadProgress } from "./ui-shared.js";
+import { SPACINGS, applySpacing, storeSpacingId, getStoredSpacingId } from "./theme.js";
 
 let editorEl = null;
 let onChangeCallback = null;
@@ -483,6 +484,16 @@ function setupFontSizeSelect(select) {
       editorEl.focus();
     }
     select.value = "";
+  });
+}
+
+function setupSpacingSelect(select) {
+  select.value = getStoredSpacingId();
+  select.addEventListener("change", () => {
+    const id = select.value;
+    applySpacing(id);
+    storeSpacingId(id);
+    editorEl.focus();
   });
 }
 
@@ -1143,6 +1154,9 @@ const TOOLBAR_HTML = `
       <option value="28">28</option>
       <option value="32">32</option>
     </select>
+    <select data-cmd="spacing" class="toolbar-select" title="Jarak antar paragraf">
+      ${SPACINGS.map((s) => `<option value="${s.id}">${s.name}</option>`).join("")}
+    </select>
   </div>
   <div class="toolbar-group">
     <button data-cmd="h2" title="Judul bagian">H2</button>
@@ -1214,6 +1228,9 @@ const FLOATING_BODY_HTML = `
         <option value="28">28</option>
         <option value="32">32</option>
       </select>
+      <select data-fcmd="spacing" class="toolbar-select toolbar-select--floating" title="Jarak antar paragraf">
+        ${SPACINGS.map((s) => `<option value="${s.id}">${s.name}</option>`).join("")}
+      </select>
       <span class="floating-toolbar__sep"></span>
       <button data-fcmd="align-left" title="Rata kiri">⬸</button>
       <button data-fcmd="align-center" title="Rata tengah">⬷</button>
@@ -1283,6 +1300,7 @@ function createFloatingToolbar() {
   });
 
   ft.querySelectorAll('select[data-fcmd="fontsize"]').forEach(setupFontSizeSelect);
+  ft.querySelectorAll('select[data-fcmd="spacing"]').forEach(setupSpacingSelect);
 
   return ft;
 }
@@ -1565,6 +1583,7 @@ export function initEditor(containerEl, initialHtml, onChange) {
   });
 
   containerEl.querySelectorAll('.editor-toolbar select[data-cmd="fontsize"]').forEach(setupFontSizeSelect);
+  containerEl.querySelectorAll('.editor-toolbar select[data-cmd="spacing"]').forEach(setupSpacingSelect);
 
   // Klik kanan di area editor → buka color palette di posisi kursor
   setupEditorContextMenu();
