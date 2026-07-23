@@ -5,10 +5,12 @@
 
 import { initFirebaseCore, auth, watchAuth, googleSignIn, signOut, checkIsAdmin } from "./firebase-core.js";
 import { applyStoredTheme, initThemeSwitcher } from "./theme.js";
+import { initExitGuard } from "./exit-guard.js";
 
 // Terapkan tema tersimpan sesegera mungkin, sebelum initApp() dipanggil,
 // supaya tidak ada "kedipan" warna default sesaat sebelum tema custom aktif.
 applyStoredTheme();
+initExitGuard();
 
 export let currentUser = null;
 export let currentIsAdmin = false;
@@ -64,6 +66,35 @@ function renderTopnav() {
     <button class="btn-text" id="navSignOut">keluar</button>
   `;
   document.getElementById("navSignOut")?.addEventListener("click", () => signOut());
+}
+
+/**
+ * Progress bar tipis yang selalu fixed di paling atas viewport — dipakai untuk
+ * upload gambar di dalam editor, supaya selalu terlihat terlepas dari toolbar
+ * mana (statis di atas / floating di pinggir) yang memicu upload-nya.
+ */
+export function showGlobalUploadProgress() {
+  let bar = document.getElementById("globalUploadProgress");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "globalUploadProgress";
+    bar.className = "upload-progress-global";
+    bar.innerHTML = `<div class="upload-progress-global__fill"></div>`;
+    document.body.appendChild(bar);
+  }
+  bar.style.display = "block";
+  const fill = bar.querySelector(".upload-progress-global__fill");
+  fill.style.width = "0%";
+  return {
+    update(percent) {
+      const p = Math.max(0, Math.min(100, Math.round(percent)));
+      fill.style.width = p + "%";
+    },
+    remove() {
+      bar.style.display = "none";
+      fill.style.width = "0%";
+    },
+  };
 }
 
 /**

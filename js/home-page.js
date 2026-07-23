@@ -365,6 +365,17 @@ function enhanceCoverImageField() {
   fileInput.style.display = "none";
   wrap.appendChild(fileInput);
 
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "btn btn-danger";
+  removeBtn.style.flexShrink = "0";
+  removeBtn.textContent = "Hapus";
+  removeBtn.title = "Hapus gambar sampul";
+  wrap.appendChild(removeBtn);
+  removeBtn.addEventListener("click", () => {
+    input.value = "";
+  });
+
   uploadBtn.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", async () => {
     const file = fileInput.files[0];

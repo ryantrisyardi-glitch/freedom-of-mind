@@ -104,7 +104,8 @@ function render() {
         ${currentIsAdmin ? `
           <button class="note-row__cover-btn" data-cover="${n.id}" title="${n.coverImage ? "Ganti gambar" : "Tambah gambar"}">
             ${n.coverImage ? "✎" : "＋"}
-          </button>` : ""}
+          </button>
+          ${n.coverImage ? `<button class="note-row__cover-remove" data-cover-remove="${n.id}" title="Hapus gambar sampul">🗑</button>` : ""}` : ""}
       </div>
     </article>
   `}).join("");
@@ -125,6 +126,14 @@ function render() {
       e.stopPropagation();
       const noteId = btn.dataset.cover;
       handleCoverUpload(noteId, btn);
+    });
+  });
+
+  // Hapus cover handler (admin only)
+  list.querySelectorAll("[data-cover-remove]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleRemoveCover(btn.dataset.coverRemove, btn);
     });
   });
 
@@ -258,6 +267,35 @@ async function handleCoverUpload(noteId, btn) {
     }
   });
   input.click();
+}
+
+async function handleRemoveCover(noteId, btn) {
+  const ok = await showConfirm("Hapus gambar sampul catatan ini?");
+  if (!ok) return;
+
+  const thumbnail = btn.closest(".note-row__thumbnail");
+  try {
+    await updateNote(noteId, { coverImage: null });
+
+    const note = notes.find((n) => n.id === noteId);
+    if (note) note.coverImage = null;
+
+    thumbnail.classList.remove("has-image");
+    const img = thumbnail.querySelector(".note-row__cover-img");
+    if (img) {
+      const empty = document.createElement("div");
+      empty.className = "note-row__cover-empty";
+      img.replaceWith(empty);
+    }
+    const coverBtn = thumbnail.querySelector(".note-row__cover-btn");
+    if (coverBtn) {
+      coverBtn.textContent = "＋";
+      coverBtn.title = "Tambah gambar";
+    }
+    btn.remove();
+  } catch (err) {
+    alert("Gagal menghapus gambar: " + err.message);
+  }
 }
 
 (async () => {

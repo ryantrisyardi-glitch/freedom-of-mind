@@ -7,7 +7,7 @@
 // =========================================================
 
 import { uploadToCloudinary } from "./data.js";
-import { createUploadProgress } from "./ui-shared.js";
+import { showGlobalUploadProgress } from "./ui-shared.js";
 
 let editorEl = null;
 let onChangeCallback = null;
@@ -41,12 +41,59 @@ function redo() {
   restoreHistoryAt(historyIndex);
 }
 
+// Ambil posisi kursor sebagai offset karakter (teks polos) relatif terhadap
+// root — dipakai supaya undo/redo bisa mengembalikan posisi kursor ke tempat
+// yang (kurang lebih) sama walau seluruh innerHTML diganti total.
+function getCaretOffset(root) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  if (!root.contains(range.startContainer)) return null;
+  const preRange = document.createRange();
+  preRange.selectNodeContents(root);
+  preRange.setEnd(range.startContainer, range.startOffset);
+  return preRange.toString().length;
+}
+
+function setCaretOffset(root, offset) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  let node, remaining = offset, lastNode = null;
+  while ((node = walker.nextNode())) {
+    lastNode = node;
+    const len = node.textContent.length;
+    if (remaining <= len) {
+      const range = document.createRange();
+      range.setStart(node, Math.max(0, remaining));
+      range.collapse(true);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return;
+    }
+    remaining -= len;
+  }
+  const range = document.createRange();
+  if (lastNode) range.setStart(lastNode, lastNode.textContent.length);
+  else range.selectNodeContents(root);
+  range.collapse(false);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
 function restoreHistoryAt(idx) {
+  const caretOffset = getCaretOffset(editorEl);
   isRestoringHistory = true;
   editorEl.innerHTML = history[idx];
   isRestoringHistory = false;
   updateUndoRedoButtons();
   triggerChange();
+  editorEl.focus();
+  if (caretOffset !== null) {
+    try { setCaretOffset(editorEl, caretOffset); } catch { /* biarkan fokus tanpa posisi kursor spesifik */ }
+  }
+  updateToolbarState();
+  updateFloatingToolbarState();
 }
 
 function updateUndoRedoButtons() {
@@ -70,6 +117,33 @@ function normalizeEmptyState() {
   const plainText = editorEl.textContent.replace(/\u200B/g, "").trim();
   const hasMedia = editorEl.querySelector("img, figure");
   if (!plainText && !hasMedia) editorEl.innerHTML = "";
+}
+
+// Sebagian browser (terutama saat paragraf ber-alignment "justify") membuat
+// <div> baru (bukan <p>) ketika Enter ditekan, walau defaultParagraphSeparator
+// sudah di-set ke "p". <div> punya margin bawaan browser yang berbeda dari
+// aturan `.editor-area p{ margin:0 0 1.2em }` kita, sehingga muncul jarak
+// ekstra yang tidak konsisten antar paragraf. Fungsi ini mengubah <div> yang
+// "nyasar" jadi <p> asli (sambil mempertahankan style/alignment-nya), TAPI
+// tidak pernah menyentuh blok yang sedang berisi kursor supaya tidak
+// mengganggu pengetikan yang sedang berlangsung.
+function normalizeStrayDivs() {
+  const sel = window.getSelection();
+  let activeBlock = null;
+  if (sel.rangeCount) {
+    let node = sel.getRangeAt(0).commonAncestorContainer;
+    node = node.nodeType === 3 ? node.parentElement : node;
+    activeBlock = node && node.closest ? node.closest("div") : null;
+  }
+  [...editorEl.children].forEach((el) => {
+    if (el.tagName !== "DIV") return;
+    if (el === activeBlock) return;
+    if (el.classList.contains("divider") || el.classList.contains("sticky-note-wrapper")) return;
+    const p = document.createElement("p");
+    if (el.hasAttribute("style")) p.setAttribute("style", el.getAttribute("style"));
+    p.innerHTML = el.innerHTML || "<br>";
+    editorEl.replaceChild(p, el);
+  });
 }
 
 function exec(command, value = null) {
@@ -179,10 +253,23 @@ function removeMarkAtSelection() {
   if (!sel.rangeCount) return false;
   const node = findMarkAtSelection();
   if (node) {
+    // Simpan node & offset kursor SEBELUM unwrap — node teks yang sama
+    // akan tetap valid setelah dipindah ke parent (cuma reparenting),
+    // jadi kita bisa taruh kursor persis di tempat yang sama lagi.
+    const anchorNode = sel.anchorNode, anchorOffset = sel.anchorOffset;
+    const focusNode = sel.focusNode, focusOffset = sel.focusOffset;
     const parent = node.parentNode;
     while (node.firstChild) parent.insertBefore(node.firstChild, node);
     parent.removeChild(node);
-    sel.removeAllRanges();
+    try {
+      const range = document.createRange();
+      range.setStart(anchorNode, anchorOffset);
+      range.setEnd(focusNode, focusOffset);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch {
+      editorEl.focus();
+    }
     scheduleHistoryPush();
     triggerChange();
     return true;
@@ -207,7 +294,13 @@ function toggleHighlight(color) {
   mark.dataset.color = useColor;
   mark.appendChild(range.extractContents());
   range.insertNode(mark);
+  // Pilih ulang isi <mark> yang baru dibuat, bukan menghapus seleksi —
+  // supaya kursor/seleksi tetap di tempat teks yang baru di-highlight,
+  // bukan melompat ke awal dokumen.
+  const newRange = document.createRange();
+  newRange.selectNodeContents(mark);
   sel.removeAllRanges();
+  sel.addRange(newRange);
   scheduleHistoryPush();
   triggerChange();
 }
@@ -232,7 +325,10 @@ function setHighlightColor(color) {
   if (markNode) {
     markNode.style.background = color;
     markNode.dataset.color = color;
+    const newRange = document.createRange();
+    newRange.selectNodeContents(markNode);
     sel.removeAllRanges();
+    sel.addRange(newRange);
   } else {
     const range = sel.getRangeAt(0);
     const mark = document.createElement("mark");
@@ -240,10 +336,73 @@ function setHighlightColor(color) {
     mark.dataset.color = color;
     mark.appendChild(range.extractContents());
     range.insertNode(mark);
+    const newRange = document.createRange();
+    newRange.selectNodeContents(mark);
     sel.removeAllRanges();
+    sel.addRange(newRange);
   }
   scheduleHistoryPush();
   triggerChange();
+}
+
+// ---------- Ukuran teks ----------
+
+function findFontSizeSpanAtSelection() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return null;
+  let node = sel.getRangeAt(0).commonAncestorContainer;
+  node = node.nodeType === 3 ? node.parentElement : node;
+  while (node && node !== editorEl) {
+    if (node.tagName === "SPAN" && node.style.fontSize) return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+function applyFontSize(px) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount || sel.isCollapsed) return;
+
+  const existing = findFontSizeSpanAtSelection();
+  if (existing && sel.getRangeAt(0).toString() === existing.textContent) {
+    existing.style.fontSize = px + "px";
+    const range = document.createRange();
+    range.selectNodeContents(existing);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    scheduleHistoryPush();
+    triggerChange();
+    return;
+  }
+
+  const range = sel.getRangeAt(0);
+  const span = document.createElement("span");
+  span.style.fontSize = px + "px";
+  span.appendChild(range.extractContents());
+  range.insertNode(span);
+
+  // Selalu pilih ulang isinya, bukan menghapus seleksi — supaya kursor
+  // tetap di tempat teks yang baru diubah ukurannya.
+  const newRange = document.createRange();
+  newRange.selectNodeContents(span);
+  sel.removeAllRanges();
+  sel.addRange(newRange);
+  scheduleHistoryPush();
+  triggerChange();
+}
+
+function setupFontSizeSelect(select) {
+  select.addEventListener("mousedown", () => saveSelection());
+  select.addEventListener("focus", () => saveSelection());
+  select.addEventListener("change", () => {
+    const px = select.value;
+    if (px) {
+      restoreSelection();
+      applyFontSize(Number(px));
+      editorEl.focus();
+    }
+    select.value = "";
+  });
 }
 
 function applyTextColor(color) {
@@ -541,6 +700,43 @@ function setAlignment(align) {
   scheduleHistoryPush(); triggerChange(); updateToolbarState(); updateFloatingToolbarState();
 }
 
+// ---------- Indentasi ----------
+
+const INDENT_STEP_EM = 1.4; // sama dengan padding-left daftar berpoin/bernomor
+const INDENT_MAX = 8;
+
+function changeIndent(delta) {
+  editorEl.focus();
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  let node = sel.getRangeAt(0).commonAncestorContainer;
+  node = node.nodeType === 3 ? node.parentElement : node;
+  if (!node) return;
+
+  const li = node.closest ? node.closest("li") : null;
+  if (li) {
+    // Di dalam daftar (bullet/nomor) — pakai indentasi bawaan browser
+    // supaya jadi sub-daftar yang benar.
+    document.execCommand(delta > 0 ? "indent" : "outdent", false, null);
+  } else {
+    const block = node.closest ? node.closest("p, h2, h3, blockquote") : null;
+    if (!block || block === editorEl) return;
+    const current = parseInt(block.dataset.indent || "0", 10);
+    const next = Math.max(0, Math.min(INDENT_MAX, current + delta));
+    if (next === 0) {
+      delete block.dataset.indent;
+      block.style.marginLeft = "";
+    } else {
+      block.dataset.indent = String(next);
+      block.style.marginLeft = (next * INDENT_STEP_EM) + "em";
+    }
+  }
+  scheduleHistoryPush();
+  triggerChange();
+  updateToolbarState();
+  updateFloatingToolbarState();
+}
+
 function getCurrentAlignment() {
   try {
     if (document.queryCommandState("justifyCenter")) return "center";
@@ -775,7 +971,7 @@ async function insertImage(position) {
     const floatingBody = document.querySelector(".floating-toolbar__body");
     toolbar?.classList.add("is-busy");
     floatingBody?.classList.add("is-busy");
-    const progress = createUploadProgress(toolbar || floatingBody, "Mengunggah gambar…");
+    const progress = showGlobalUploadProgress();
     try {
       const url = await handleImageUpload(file, progress);
       if (!url) return;
@@ -855,6 +1051,19 @@ const TOOLBAR_HTML = `
     <button data-cmd="sticky" title="Sticky Note">📌</button>
   </div>
   <div class="toolbar-group">
+    <select data-cmd="fontsize" class="toolbar-select" title="Ukuran teks">
+      <option value="">Ukuran</option>
+      <option value="12">12</option>
+      <option value="14">14</option>
+      <option value="16">16</option>
+      <option value="18">18</option>
+      <option value="20">20</option>
+      <option value="24">24</option>
+      <option value="28">28</option>
+      <option value="32">32</option>
+    </select>
+  </div>
+  <div class="toolbar-group">
     <button data-cmd="h2" title="Judul bagian">H2</button>
     <button data-cmd="h3" title="Sub-judul">H3</button>
     <button data-cmd="p" title="Paragraf normal">¶</button>
@@ -864,6 +1073,10 @@ const TOOLBAR_HTML = `
     <button data-cmd="align-center" title="Rata tengah">⬷</button>
     <button data-cmd="align-right" title="Rata kanan">⬶</button>
     <button data-cmd="align-justify" title="Rata kanan-kiri">⬳</button>
+  </div>
+  <div class="toolbar-group">
+    <button data-cmd="outdent" title="Kurangi indentasi">⇤¶</button>
+    <button data-cmd="indent" title="Tambah indentasi">⇥¶</button>
   </div>
   <div class="toolbar-group">
     <button data-cmd="quote-line" title="Kutipan biasa">" biasa</button>
@@ -908,10 +1121,25 @@ const FLOATING_BODY_HTML = `
       </span>
       <button data-fcmd="sticky" title="Sticky Note">📌</button>
       <span class="floating-toolbar__sep"></span>
+      <select data-fcmd="fontsize" class="toolbar-select toolbar-select--floating" title="Ukuran teks">
+        <option value="">Sz</option>
+        <option value="12">12</option>
+        <option value="14">14</option>
+        <option value="16">16</option>
+        <option value="18">18</option>
+        <option value="20">20</option>
+        <option value="24">24</option>
+        <option value="28">28</option>
+        <option value="32">32</option>
+      </select>
+      <span class="floating-toolbar__sep"></span>
       <button data-fcmd="align-left" title="Rata kiri">⬸</button>
       <button data-fcmd="align-center" title="Rata tengah">⬷</button>
       <button data-fcmd="align-right" title="Rata kanan">⬶</button>
       <button data-fcmd="align-justify" title="Justify">⬳</button>
+      <span class="floating-toolbar__sep"></span>
+      <button data-fcmd="outdent" title="Kurangi indentasi">⇤¶</button>
+      <button data-fcmd="indent" title="Tambah indentasi">⇥¶</button>
       <span class="floating-toolbar__sep"></span>
       <button data-fcmd="h2" title="Judul">H2</button>
       <button data-fcmd="h3" title="Sub-judul">H3</button>
@@ -971,6 +1199,8 @@ function createFloatingToolbar() {
     });
   });
 
+  ft.querySelectorAll('select[data-fcmd="fontsize"]').forEach(setupFontSizeSelect);
+
   return ft;
 }
 
@@ -988,6 +1218,8 @@ function dispatchCmd(cmd) {
     case "align-center": setAlignment("center"); break;
     case "align-right": setAlignment("right"); break;
     case "align-justify": setAlignment("justify"); break;
+    case "indent": changeIndent(1); break;
+    case "outdent": changeIndent(-1); break;
     case "h2": insertHeading(2); break;
     case "h3": insertHeading(3); break;
     case "p": insertParagraph(); break;
@@ -1247,11 +1479,14 @@ export function initEditor(containerEl, initialHtml, onChange) {
     });
   });
 
+  containerEl.querySelectorAll('.editor-toolbar select[data-cmd="fontsize"]').forEach(setupFontSizeSelect);
+
   // Klik kanan di area editor → buka color palette di posisi kursor
   setupEditorContextMenu();
 
   editorEl.addEventListener("input", () => {
     normalizeEmptyState();
+    normalizeStrayDivs();
     triggerChange();
     scheduleHistoryPush();
   });
@@ -1294,8 +1529,9 @@ export function initEditor(containerEl, initialHtml, onChange) {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
     if (file && file.type.startsWith("image/")) {
+      const progress = showGlobalUploadProgress();
       try {
-        const url = await handleImageUpload(file);
+        const url = await handleImageUpload(file, progress);
         if (url) {
           const figure = buildImageFigure(url, "full");
           insertNodeAtCursor(figure);
@@ -1304,6 +1540,8 @@ export function initEditor(containerEl, initialHtml, onChange) {
         }
       } catch (err) {
         alert("Gagal mengunggah gambar: " + err.message);
+      } finally {
+        progress.remove();
       }
     }
   });

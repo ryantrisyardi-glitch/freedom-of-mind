@@ -455,6 +455,19 @@ button{ font-family: inherit; }
   background: rgba(0,0,0,0.45);
   color: #fff;
 }
+.note-row__cover-remove {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 26px; height: 26px;
+  border: none; border-radius: 50%;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+.note-row__cover-remove:hover { background: var(--danger); }
 
 /* On mobile: thumbnail tetap full-bleed tapi sedikit lebih ramping */
 @media (max-width: 600px) {
@@ -585,6 +598,21 @@ button{ font-family: inherit; }
 .editor-toolbar button:disabled{ opacity: 0.35; cursor: not-allowed; }
 .editor-toolbar button:disabled:hover{ border-color: var(--line); }
 
+.toolbar-select{
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+.toolbar-select:hover{ border-color: var(--terracotta-dim); }
+.toolbar-select--floating{
+  width: 46px; padding: 4px 2px; font-size: 12px; text-align: center;
+}
+
 .editor-area{
   padding: 28px 30px;
   min-height: 320px;
@@ -600,6 +628,13 @@ button{ font-family: inherit; }
 }
 .editor-area::after{ content:""; display:block; clear:both; }
 .editor-area p{ margin: 0 0 1.2em; }
+/* Jaring pengaman: kalau browser sempat membuat <div> alih-alih <p> saat
+   Enter (umum terjadi waktu paragraf sedang rata kanan-kiri/justify),
+   jangan sampai jaraknya beda dari <p> normal. */
+.editor-area > div:not(.divider):not(.sticky-note-wrapper){ margin: 0 0 1.2em; }
+.note-content > div:not(.divider):not(.sticky-note-wrapper){ margin: 0 0 1.3em; }
+.editor-area ul, .editor-area ol{ padding-left: 1.4em; margin: 0 0 1.2em; }
+.note-content ol{ padding-left: 1.4em; margin: 0 0 1.3em; }
 .editor-area h2{ font-family: var(--font-display); font-size:1.5rem; margin: 1.2em 0 .5em; clear:both; }
 .editor-area h3{ font-family: var(--font-display); font-size:1.2rem; margin: 1em 0 .4em; clear:both; }
 .editor-area blockquote{
@@ -1527,12 +1562,26 @@ button{ font-family: inherit; }
 }
 .upload-progress__pct{ min-width: 34px; text-align:right; }
 
-/* Bar tipis global di bawah topnav, dipakai saat mengunggah gambar di editor */
+/* Bar tipis global di paling atas viewport, dipakai saat mengunggah gambar di editor */
 .upload-progress-global{
-  position: sticky; top: 0; z-index: 60; height: 3px; width: 100%;
-  background: transparent; pointer-events: none;
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000; height: 3px;
+  background: transparent; pointer-events: none; display: none;
 }
 .upload-progress-global__fill{
   height: 100%; width: 0%; background: var(--terracotta);
   transition: width .15s ease-out;
 }
+
+/* ============================================
+   EXIT TOAST — "tekan sekali lagi untuk keluar"
+   ============================================ */
+.exit-toast{
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(12px);
+  background: rgba(20,18,16,0.92); color: #fff;
+  font-family: var(--font-body); font-size: 13.5px;
+  padding: 10px 20px; border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.28);
+  z-index: 2000; opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.exit-toast.is-visible{ opacity: 1; transform: translateX(-50%) translateY(0); }
