@@ -8,7 +8,6 @@
 
 import { uploadToCloudinary } from "./data.js";
 import { showGlobalUploadProgress } from "./ui-shared.js";
-import { SPACINGS, applySpacing, storeSpacingId, getStoredSpacingId } from "./theme.js";
 
 let editorEl = null;
 let onChangeCallback = null;
@@ -487,16 +486,6 @@ function setupFontSizeSelect(select) {
   });
 }
 
-function setupSpacingSelect(select) {
-  select.value = getStoredSpacingId();
-  select.addEventListener("change", () => {
-    const id = select.value;
-    applySpacing(id);
-    storeSpacingId(id);
-    editorEl.focus();
-  });
-}
-
 function applyTextColor(color) {
   const useColor = color || activeTextColor;
   const sel = window.getSelection();
@@ -827,6 +816,73 @@ function changeIndent(delta) {
   triggerChange();
   updateToolbarState();
   updateFloatingToolbarState();
+}
+
+// ---------- Jarak antar paragraf (per blok yang diblok/kursor berada) ----------
+// PENTING: ini format konten sungguhan (disimpan sebagai style di HTML
+// catatan), sama seperti indent/font size — jadi hasilnya akan terlihat
+// oleh SEMUA pembaca, bukan cuma preferensi pribadi di browser sendiri.
+
+const SPACINGS = [
+  { id: "", name: "Spasi" },
+  { id: "reset", name: "Normal (bawaan)" },
+  { id: "compact", name: "Rapat", em: 0.4 },
+  { id: "relaxed", name: "Lega", em: 1.8 },
+  { id: "loose", name: "Sangat Lega", em: 2.6 },
+];
+
+const SPACING_BLOCK_SELECTOR = "p, h2, h3, blockquote, li";
+
+function getBlocksInSelection() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return [];
+  const range = sel.getRangeAt(0);
+  const blocks = new Set();
+
+  if (range.collapsed) {
+    let node = range.commonAncestorContainer;
+    node = node.nodeType === 3 ? node.parentElement : node;
+    const block = node && node.closest ? node.closest(SPACING_BLOCK_SELECTOR) : null;
+    if (block) blocks.add(block);
+  } else {
+    editorEl.querySelectorAll(SPACING_BLOCK_SELECTOR).forEach((b) => {
+      if (range.intersectsNode(b)) blocks.add(b);
+    });
+  }
+  return [...blocks];
+}
+
+function setParagraphSpacing(id) {
+  const blocks = getBlocksInSelection();
+  if (!blocks.length) return;
+  const spec = SPACINGS.find((s) => s.id === id);
+  const em = spec ? spec.em : undefined; // undefined untuk "reset"/tidak ditemukan
+
+  blocks.forEach((block) => {
+    if (em === undefined) {
+      block.style.removeProperty("margin-bottom");
+      delete block.dataset.spacing;
+    } else {
+      block.style.marginBottom = em + "em";
+      block.dataset.spacing = id;
+    }
+  });
+  scheduleHistoryPush();
+  triggerChange();
+}
+
+function setupSpacingSelect(select) {
+  select.addEventListener("mousedown", () => saveSelection());
+  select.addEventListener("focus", () => saveSelection());
+  select.addEventListener("change", () => {
+    const id = select.value;
+    if (id) {
+      restoreSelection();
+      setParagraphSpacing(id);
+      editorEl.focus();
+    }
+    select.value = "";
+  });
 }
 
 function getCurrentAlignment() {

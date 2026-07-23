@@ -80,45 +80,6 @@ export const THEMES = [
   },
 ];
 
-const SPACING_KEY = "fom-p-spacing";
-
-// Pilihan jarak (margin bawah) antar paragraf — dipakai di editor DAN di
-// tampilan baca catatan, supaya konsisten. Disimpan di localStorage saja,
-// tidak dikirim ke server.
-export const SPACINGS = [
-  { id: "compact", name: "Rapat", em: 0.6 },
-  { id: "normal", name: "Normal", em: 1.2 },
-  { id: "relaxed", name: "Lega", em: 1.8 },
-  { id: "loose", name: "Sangat Lega", em: 2.4 },
-];
-
-export function getStoredSpacingId() {
-  try {
-    return localStorage.getItem(SPACING_KEY) || "normal";
-  } catch {
-    return "normal";
-  }
-}
-
-export function storeSpacingId(id) {
-  try {
-    localStorage.setItem(SPACING_KEY, id);
-  } catch {
-    // biarkan berlaku untuk sesi ini saja
-  }
-}
-
-export function applySpacing(id) {
-  const spacing = SPACINGS.find((s) => s.id === id) || SPACINGS[1];
-  document.documentElement.style.setProperty("--p-gap", spacing.em + "em");
-  document.documentElement.setAttribute("data-p-spacing", spacing.id);
-  return spacing;
-}
-
-export function applyStoredSpacing() {
-  return applySpacing(getStoredSpacingId());
-}
-
 function getStoredThemeId() {
   try {
     return localStorage.getItem(STORAGE_KEY) || "terracotta";

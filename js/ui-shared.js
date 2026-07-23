@@ -4,13 +4,12 @@
 // =========================================================
 
 import { initFirebaseCore, auth, watchAuth, googleSignIn, signOut, checkIsAdmin } from "./firebase-core.js";
-import { applyStoredTheme, initThemeSwitcher, applyStoredSpacing } from "./theme.js";
+import { applyStoredTheme, initThemeSwitcher } from "./theme.js";
 import { initExitGuard } from "./exit-guard.js";
 
-// Terapkan tema & spacing tersimpan sesegera mungkin, sebelum initApp()
-// dipanggil, supaya tidak ada "kedipan" tampilan default.
+// Terapkan tema tersimpan sesegera mungkin, sebelum initApp() dipanggil,
+// supaya tidak ada "kedipan" tampilan default.
 applyStoredTheme();
-applyStoredSpacing();
 initExitGuard();
 
 export let currentUser = null;
