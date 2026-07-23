@@ -113,6 +113,27 @@ function triggerChange() {
   if (onChangeCallback) onChangeCallback(editorEl.innerHTML);
 }
 
+// Rapikan spasi berlebih (termasuk &nbsp; lama dari catatan sebelumnya)
+// jadi satu spasi biasa. Sengaja TIDAK dipanggil setiap kali "input" —
+// hanya saat catatan dibuka & saat editor kehilangan fokus — supaya tidak
+// mengganggu posisi kursor selagi sedang aktif mengetik.
+function sanitizeWhitespace(root) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  let n;
+  while ((n = walker.nextNode())) nodes.push(n);
+  let changed = false;
+  nodes.forEach((node) => {
+    if (!node.nodeValue) return;
+    const cleaned = node.nodeValue.replace(/[ \u00A0]{2,}/g, " ");
+    if (cleaned !== node.nodeValue) {
+      node.nodeValue = cleaned;
+      changed = true;
+    }
+  });
+  return changed;
+}
+
 function normalizeEmptyState() {
   const plainText = editorEl.textContent.replace(/\u200B/g, "").trim();
   const hasMedia = editorEl.querySelector("img, figure");
@@ -186,14 +207,74 @@ function selectAllContent() {
   updateFloatingToolbarState();
 }
 
+// Cari <ol> terdekat SEBELUM elemen ini di alur dokumen (boleh dipisah
+// paragraf/gambar/heading lain di antaranya) — dipakai untuk "lanjutkan
+// penomoran" alih-alih selalu mulai dari 1 lagi.
+function findPrecedingOl(fromEl) {
+  let node = fromEl.previousElementSibling;
+  while (node) {
+    if (node.tagName === "OL") return node;
+    node = node.previousElementSibling;
+  }
+  return null;
+}
+
+function getOlEndNumber(ol) {
+  const start = parseInt(ol.getAttribute("start") || "1", 10);
+  const liCount = ol.querySelectorAll(":scope > li").length;
+  return start + Math.max(0, liCount - 1);
+}
+
 // Toggle list — ordered=false untuk bullet (•), ordered=true untuk numbering (1. 2. 3.)
 function toggleList(ordered = false) {
   editorEl.focus();
+  const sel = window.getSelection();
+  let wasInList = false;
+  if (sel.rangeCount) {
+    let node = sel.getRangeAt(0).commonAncestorContainer;
+    node = node.nodeType === 3 ? node.parentElement : node;
+    wasInList = !!(node && node.closest && node.closest(ordered ? "ol" : "ul"));
+  }
+
   document.execCommand(ordered ? "insertOrderedList" : "insertUnorderedList", false, null);
+
+  if (ordered && !wasInList) {
+    // Daftar baru saja dibuat (bukan sedang di-toggle-off) — kalau ada <ol>
+    // sebelumnya di catatan ini, lanjutkan penomorannya alih-alih mulai
+    // dari 1 lagi, supaya "1, 2, 3" bisa diteruskan walau sempat terpisah
+    // paragraf/gambar lain di antaranya.
+    const sel2 = window.getSelection();
+    let node2 = sel2.rangeCount ? sel2.getRangeAt(0).commonAncestorContainer : null;
+    node2 = node2 && node2.nodeType === 3 ? node2.parentElement : node2;
+    const newOl = node2 && node2.closest ? node2.closest("ol") : null;
+    if (newOl) {
+      const prevOl = findPrecedingOl(newOl);
+      if (prevOl) {
+        const nextStart = getOlEndNumber(prevOl) + 1;
+        if (nextStart > 1) newOl.setAttribute("start", String(nextStart));
+      }
+    }
+  }
+
   scheduleHistoryPush();
   triggerChange();
   updateToolbarState();
   updateFloatingToolbarState();
+}
+
+// Reset penomoran daftar yang sedang berisi kursor kembali ke 1 — dipakai
+// kalau lanjut-otomatis di atas TIDAK diinginkan untuk daftar tertentu.
+function restartNumbering() {
+  editorEl.focus();
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  let node = sel.getRangeAt(0).commonAncestorContainer;
+  node = node.nodeType === 3 ? node.parentElement : node;
+  const ol = node && node.closest ? node.closest("ol") : null;
+  if (!ol) return;
+  ol.removeAttribute("start");
+  scheduleHistoryPush();
+  triggerChange();
 }
 
 // ---------- Highlight dengan warna ----------
@@ -1084,7 +1165,8 @@ const TOOLBAR_HTML = `
   </div>
   <div class="toolbar-group">
     <button data-cmd="ul" title="Daftar berpoin">• List</button>
-    <button data-cmd="ol" title="Daftar bernomor">1. List</button>
+    <button data-cmd="ol" title="Daftar bernomor — otomatis lanjut dari nomor sebelumnya kalau ada">1. List</button>
+    <button data-cmd="ol-restart" title="Mulai ulang penomoran daftar ini dari 1">↺1</button>
     <button data-cmd="divider" title="Pembatas">⋯</button>
   </div>
   <div class="toolbar-group">
@@ -1148,7 +1230,8 @@ const FLOATING_BODY_HTML = `
       <button data-fcmd="quote-line" title="Kutipan">❝</button>
       <button data-fcmd="quote-eye" title="Kutipan besar">❝!</button>
       <button data-fcmd="ul" title="Daftar berpoin">•</button>
-      <button data-fcmd="ol" title="Daftar bernomor">1.</button>
+      <button data-fcmd="ol" title="Daftar bernomor — otomatis lanjut dari nomor sebelumnya">1.</button>
+      <button data-fcmd="ol-restart" title="Mulai ulang dari 1">↺1</button>
       <button data-fcmd="divider" title="Pembatas">⋯</button>
       <span class="floating-toolbar__sep"></span>
       <button data-fcmd="img-left" title="Gambar di kiri, teks di kanan">🖼⇤</button>
@@ -1227,6 +1310,7 @@ function dispatchCmd(cmd) {
     case "quote-eye": insertQuote("eye"); break;
     case "ul": toggleList(false); break;
     case "ol": toggleList(true); break;
+    case "ol-restart": restartNumbering(); break;
     case "divider": insertDivider(); break;
     case "selectall": selectAllContent(); break;
     case "img-left": insertImage("left"); break;
@@ -1443,6 +1527,7 @@ export function initEditor(containerEl, initialHtml, onChange) {
   `;
   editorEl = containerEl.querySelector("#editorArea");
   editorEl.innerHTML = initialHtml && initialHtml.trim() ? initialHtml : "<p><br></p>";
+  sanitizeWhitespace(editorEl);
 
   // Pastikan setiap kali Enter ditekan browser membuat <p> baru (bukan <div>,
   // yang jadi default di sebagian browser) — supaya paragraf pertama SELALU
@@ -1519,6 +1604,16 @@ export function initEditor(containerEl, initialHtml, onChange) {
       e.preventDefault(); undo();
     } else if (ctrlOrCmd && ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y")) {
       e.preventDefault(); redo();
+    } else if (e.key === " " && !ctrlOrCmd && !e.altKey) {
+      // Sebagian browser diam-diam mengganti spasi kedua/ketiga yang
+      // berurutan jadi non-breaking space (&nbsp;) supaya tidak "hilang"
+      // secara visual. Masalahnya &nbsp; TIDAK PERNAH menyusut walau CSS
+      // white-space normal — di paragraf rata kanan-kiri (justify) ini
+      // jadi jarak antar kata yang tiba-tiba sangat lebar, padahal tidak
+      // ada kata panjang sama sekali. Dengan selalu memasukkan spasi biasa
+      // secara eksplisit di sini, ini tidak akan terjadi lagi.
+      e.preventDefault();
+      document.execCommand("insertText", false, " ");
     }
   });
 
@@ -1575,6 +1670,9 @@ export function initEditor(containerEl, initialHtml, onChange) {
       const active = document.activeElement;
       if (!floatingToolbarEl.contains(active) && active !== editorEl && !editorEl.contains(active)) {
         if (window.innerWidth <= 768) floatingToolbarEl.classList.remove("is-visible");
+        // Aman merapikan spasi berlebih sekarang — user sudah benar-benar
+        // berhenti mengetik di editor ini, jadi tidak akan mengganggu kursor.
+        if (sanitizeWhitespace(editorEl)) triggerChange();
       }
     }, 150);
   });
