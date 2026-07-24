@@ -22,6 +22,8 @@ let activeTab = "analytics";
 let admins = [], readers = [], pageStats = [], popularPages = [], comments = [], visitLogs = [];
 let visitFilterDate = "", visitFilterHourFrom = 0, visitFilterHourTo = 23;
 
+let loadErrors = {};
+
 async function loadAndRender() {
   const root = document.getElementById("adminRoot");
   if (!currentUser) {
@@ -33,12 +35,26 @@ async function loadAndRender() {
     return;
   }
   root.innerHTML = '<div class="empty-state">Memuat data...</div>';
-  try {
-    [admins, readers, pageStats, popularPages, comments, visitLogs] = await Promise.all([
-      getAllAdmins(), getAllReaders(), getPageViewStats(30), getPopularPages(10), getAllComments(), getVisitLogs(14),
-    ]);
-  } catch (err) {
-    root.innerHTML = '<div class="empty-state">Gagal memuat: ' + (err.message || "") + "</div>";
+
+  loadErrors = {};
+  const results = await Promise.allSettled([
+    getAllAdmins(), getAllReaders(), getPageViewStats(30), getPopularPages(10), getAllComments(), getVisitLogs(14),
+  ]);
+  const keys = ["admins", "readers", "pageStats", "popularPages", "comments", "visitLogs"];
+  const fallbacks = [admins, readers, pageStats, popularPages, comments, visitLogs];
+  const values = results.map(function(r, i) {
+    if (r.status === "fulfilled") return r.value;
+    loadErrors[keys[i]] = (r.reason && r.reason.message) || String(r.reason);
+    return Array.isArray(fallbacks[i]) ? [] : fallbacks[i];
+  });
+  admins = values[0]; readers = values[1]; pageStats = values[2];
+  popularPages = values[3]; comments = values[4]; visitLogs = values[5];
+
+  // Kalau SEMUA query gagal (mis. belum login/rules salah total), baru
+  // tampilkan error penuh — kalau cuma sebagian gagal, tetap render apa
+  // adanya dan tunjukkan pesan kecil di bagian yang bermasalah saja.
+  if (Object.keys(loadErrors).length === results.length) {
+    root.innerHTML = '<div class="empty-state">Gagal memuat: ' + (loadErrors.admins || "") + "</div>";
     return;
   }
   render();
@@ -263,6 +279,14 @@ function renderAnalytics() {
 
 // ---- Detail kunjungan per-baris, dengan filter tanggal & rentang jam ----
 function renderVisitLogSection() {
+  if (loadErrors.visitLogs) {
+    return '<div class="stat-section">' +
+      '<h3 class="stat-section__title">Detail Kunjungan (per jam)</h3>' +
+      '<div class="stat-banner stat-banner--warn">Gagal memuat detail kunjungan: ' + escHtml(loadErrors.visitLogs) +
+        '. Kemungkinan Firestore Rules untuk koleksi <code>visitLogs</code> belum di-Publish ulang di Firebase Console — lihat README.md bagian Setup.</div>' +
+    '</div>';
+  }
+
   var hourOptionsFrom = "", hourOptionsTo = "";
   for (var h = 0; h < 24; h++) {
     var label = String(h).padStart(2, "0") + ":00";
@@ -475,15 +499,33 @@ function renderMaintenance() {
 // Versi standalone dari normalisasi di editor.js (tanpa contenteditable) —
 // membungkus teks/elemen yang belum jadi <p> di awal catatan jadi <p> asli,
 // dan mengubah <div> pertama jadi <p>, supaya selector CSS `p:first-of-type`
-// (drop cap) selalu punya target.
+// (drop cap) selalu punya target YANG BENAR (bukan paragraf kosong nyasar).
+function isEmptyLeadingP(el) {
+  if (!el || el.nodeType !== 1 || el.tagName !== "P") return false;
+  if (el.querySelector("img, figure")) return false; // jangan buang yang berisi gambar
+  const text = el.textContent.replace(/\u200B|\u00A0/g, "").trim();
+  return text === "";
+}
+
 function fixDropCapHtml(html) {
   const container = document.createElement("div");
   container.innerHTML = html || "";
   const BLOCK_TAGS = new Set(["P", "H2", "H3", "BLOCKQUOTE", "UL", "OL", "FIGURE", "DIV", "HR"]);
   const isBlock = (n) => n.nodeType === 1 && BLOCK_TAGS.has(n.tagName);
 
+  let changed = false;
+
+  // 1) Buang <p> KOSONG yang nyasar di paling awal (mis. baris kosong tak
+  //    sengaja sebelum mulai menulis). Ini penyebab paling umum drop cap
+  //    tidak muncul: CSS `p:first-of-type` menempel ke paragraf kosong itu,
+  //    bukan ke paragraf pertama yang sungguhan berisi tulisan.
+  while (container.firstChild && isEmptyLeadingP(container.firstChild)) {
+    container.removeChild(container.firstChild);
+    changed = true;
+  }
+
   const firstNode = container.firstChild;
-  if (!firstNode) return { html: html || "", changed: false };
+  if (!firstNode) return { html: container.innerHTML, changed };
 
   if (!isBlock(firstNode)) {
     const p = document.createElement("p");
@@ -504,7 +546,7 @@ function fixDropCapHtml(html) {
     return { html: container.innerHTML, changed: true };
   }
 
-  return { html: html || "", changed: false };
+  return { html: container.innerHTML, changed };
 }
 
 async function handleBackup() {
