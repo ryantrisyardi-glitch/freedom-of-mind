@@ -50,6 +50,7 @@ async function loadAndRender() {
   });
   admins = values[0]; readers = values[1]; pageStats = values[2];
   popularPages = values[3]; comments = values[4]; visitLogs = values[5];
+  lastLoadedAt = new Date();
 
   // Kalau SEMUA query gagal (mis. belum login/rules salah total), baru
   // tampilkan error penuh — kalau cuma sebagian gagal, tetap render apa
@@ -61,8 +62,13 @@ async function loadAndRender() {
   render();
 }
 
+let lastLoadedAt = null;
+
 function render() {
   const root = document.getElementById("adminRoot");
+  var refreshedLabel = lastLoadedAt
+    ? "Data per " + lastLoadedAt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : "";
   root.innerHTML =
     '<div class="admin-panel">' +
       '<div class="admin-tabs">' +
@@ -70,6 +76,9 @@ function render() {
         tabBtn("readers",   "Pembaca",  readers.length) +
         tabBtn("admins",    "Admin",    admins.length + 1) +
         tabBtn("maintenance", "Perbaikan", "") +
+        '<span class="admin-tabs__spacer"></span>' +
+        '<span class="admin-tabs__refreshed" id="adminRefreshedAt">' + escHtml(refreshedLabel) + '</span>' +
+        '<button class="btn" id="adminRefreshBtn" title="Data di sini diambil sekali saat halaman dibuka — klik untuk mengambil data terbaru dari server tanpa reload penuh">🔄 Muat ulang</button>' +
       "</div>" +
       '<div id="adminTabContent">' +
         (activeTab === "analytics" ? renderAnalytics() :
@@ -80,6 +89,12 @@ function render() {
 
   root.querySelectorAll(".admin-tab").forEach(function(b) {
     b.addEventListener("click", function() { activeTab = b.dataset.tab; render(); });
+  });
+  var refreshBtn = document.getElementById("adminRefreshBtn");
+  if (refreshBtn) refreshBtn.addEventListener("click", function() {
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = "Memuat…";
+    loadAndRender();
   });
   if (activeTab === "analytics") {
     var applyBtn = document.getElementById("visitFilterApplyBtn");
@@ -132,7 +147,7 @@ function tabBtn(tab, label, count) {
 // ============================================================
 function renderAnalytics() {
   var today    = new Date().toISOString().slice(0, 10);
-  var weekAgo  = daysAgo(7);
+  var weekAgo  = daysAgo(6); // 7 hari termasuk hari ini (0..6) — selaras dgn thisWeekViews di bawah
   var monthAgo = daysAgo(30);
 
   var todayViews = 0, weekViews = 0, monthViews = 0;
@@ -184,14 +199,22 @@ function renderAnalytics() {
   var max7   = 1;
   last7.forEach(function(d) { if ((dailyMap[d] || 0) > max7) max7 = dailyMap[d]; });
 
+  // ---- Perbandingan ala Google Analytics: hari ini vs kemarin,
+  // minggu ini vs minggu lalu — dihitung dari dailyMap yang sudah ada
+  // (data 30 hari dari getPageViewStats), tidak perlu query tambahan.
+  var yesterdayViews = dailyMap[daysAgo(1)] || 0;
+  var thisWeekViews = 0, lastWeekViews = 0;
+  for (var j = 0; j <= 6; j++)  thisWeekViews += dailyMap[daysAgo(j)]  || 0;
+  for (var k = 7; k <= 13; k++) lastWeekViews += dailyMap[daysAgo(k)] || 0;
+
   var banner = ga4Active
     ? '<div class="stat-banner stat-banner--ok">Google Analytics aktif (' + escHtml(window.GA_MEASUREMENT_ID) +
         ') &mdash; <a href="https://analytics.google.com" target="_blank" rel="noopener">buka dashboard GA4</a></div>'
     : '<div class="stat-banner stat-banner--warn">Google Analytics belum aktif &mdash; isi Measurement ID di js/firebase-config.js</div>';
 
   var cards =
-    statCard("Hari ini",        todayViews, "kunjungan",    todayUniq + " unik") +
-    statCard("7 Hari",          weekViews,  "kunjungan",    weekUniq  + " unik") +
+    statCard("Hari ini",        todayViews, "kunjungan",    todayUniq + " unik", trendBadge(todayViews, yesterdayViews)) +
+    statCard("7 Hari",          weekViews,  "kunjungan",    weekUniq  + " unik", trendBadge(thisWeekViews, lastWeekViews)) +
     statCard("30 Hari",         monthViews, "kunjungan",    monthUniq + " unik") +
     statCard("Durasi Rata-rata",avgDurStr,  "per sesi",     totalReadSessions + " sesi") +
     statCard("Pembaca Login",   readers.length, "akun",     newReaders + " baru (7h)") +
@@ -361,13 +384,28 @@ function renderVisitLogSection() {
   '</div>';
 }
 
-function statCard(label, value, unit, sub) {
+function trendBadge(current, previous) {
+  // Kalau baseline (previous) 0, persentase tidak bermakna (bisa "tak
+  // terhingga") — tampilkan sebagai kunjungan baru murni, bukan %.
+  if (previous === 0) {
+    if (current === 0) return '<span class="trend trend--flat">tidak ada data</span>';
+    return '<span class="trend trend--up">baru (0 → ' + current.toLocaleString("id-ID") + ")</span>";
+  }
+  var pct = Math.round(((current - previous) / previous) * 100);
+  if (pct === 0) return '<span class="trend trend--flat">= sama seperti sebelumnya</span>';
+  var arrow = pct > 0 ? "▲" : "▼";
+  var cls   = pct > 0 ? "trend--up" : "trend--down";
+  return '<span class="trend ' + cls + '">' + arrow + " " + Math.abs(pct) + "% vs sebelumnya</span>";
+}
+
+function statCard(label, value, unit, sub, trendHtml) {
   var display = typeof value === "number" ? value.toLocaleString("id-ID") : value;
   return '<div class="stat-card">' +
     '<div class="stat-card__val">' + display + "</div>" +
     '<div class="stat-card__unit">' + unit + "</div>" +
     '<div class="stat-card__label">' + label + "</div>" +
     '<div class="stat-card__sub">' + sub + "</div>" +
+    (trendHtml ? '<div class="stat-card__trend">' + trendHtml + "</div>" : "") +
     "</div>";
 }
 

@@ -3,7 +3,7 @@
 // =========================================================
 
 import { initAnalytics, updateAnalyticsTitle } from "./analytics.js";
-import { initApp, onAuthReady, currentIsAdmin, showModal, showConfirm, createUploadProgress } from "./ui-shared.js";
+import { initApp, onAuthReady, currentIsAdmin, showModal, showConfirm, createUploadProgress, renderFloatingChapterNav } from "./ui-shared.js";
 import { getChapter, getNotesByChapter, getNotesByChapterForAdmin, createNote, deleteNote, updateNote, uploadToCloudinary } from "./data.js";
 import { defaultChapterArt } from "./chapter-art.js";
 
@@ -46,6 +46,10 @@ async function loadAndRender() {
   document.title = chapter.judul + " — Freedom of Mind";
   updateAnalyticsTitle(chapter.judul);
   if (window.gtag) window.gtag("event", "view_chapter", { chapter_title: chapter.judul, chapter_id: chapterId });
+  // Halaman ini SENDIRI adalah submenu chapter — jadi tombol mengambang cukup
+  // satu tujuan: balik ke menu utama semua chapter. Tetap fixed ke viewport
+  // supaya terlihat berapa pun panjang daftar catatan / posisi scroll.
+  renderFloatingChapterNav({});
   render();
 }
 
