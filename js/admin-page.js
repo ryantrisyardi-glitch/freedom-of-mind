@@ -502,15 +502,16 @@ function renderComparisonSection(dailyMap, dailyUniqMap) {
   var totalUniq = groups.reduce(function(a, g) { return a + g.uniq; }, 0);
   var pctUniq = totalQty > 0 ? Math.round((totalUniq / totalQty) * 100) : 0;
 
+  var TRACK_H = 110; // tinggi area bar dalam px — dipakai juga untuk hitung tinggi batang
   var cols = groups.length === 0
     ? '<p class="empty-state" style="margin:12px 0;font-size:.85rem">Belum ada data untuk periode ini.</p>'
     : groups.map(function(g) {
-        var hQty  = Math.round((g.qty  / maxV) * 100);
-        var hUniq = Math.round((g.uniq / maxV) * 100);
+        var hQty  = Math.max(2, Math.round((g.qty  / maxV) * TRACK_H));
+        var hUniq = Math.max(2, Math.round((g.uniq / maxV) * TRACK_H));
         return '<div class="compare-chart__col" title="' + escHtml(g.label) + ": " + g.qty + " qty, " + g.uniq + ' unik">' +
-          '<div class="compare-chart__bars">' +
-            '<div class="compare-chart__bar compare-chart__bar--qty" style="height:' + hQty + '%"></div>' +
-            '<div class="compare-chart__bar compare-chart__bar--uniq" style="height:' + hUniq + '%"></div>' +
+          '<div class="compare-chart__bars" style="height:' + TRACK_H + 'px">' +
+            '<div class="compare-chart__bar compare-chart__bar--qty" style="height:' + hQty + 'px"></div>' +
+            '<div class="compare-chart__bar compare-chart__bar--uniq" style="height:' + hUniq + 'px"></div>' +
           '</div>' +
           '<div class="compare-chart__label">' + escHtml(g.label) + '</div>' +
         '</div>';
