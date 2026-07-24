@@ -324,6 +324,48 @@ button{ font-family: inherit; }
   font-family: var(--font-mono); font-size: 12px; color: var(--sage); margin: 28px 0 6px;
 }
 .breadcrumb a{ color: var(--sage); }
+
+/* ---------- Floating chapter nav (note.html) ----------
+   Fixed ke viewport, bukan ke posisi scroll, supaya pembaca selalu bisa
+   lompat ke submenu chapter / menu utama tanpa scroll balik ke atas. */
+.floating-nav{
+  position: fixed;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 500;
+  display: flex; align-items: center; gap: 6px;
+  background: var(--paper-card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 8px;
+  box-shadow: 0 6px 20px var(--shadow);
+  max-width: calc(100vw - 24px);
+}
+.floating-nav__link{
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 42vw;
+}
+.floating-nav__link:hover{ background: var(--paper-dim); }
+.floating-nav__link--home{ color: var(--terracotta); font-weight: 600; }
+.floating-nav__icon{ flex: none; }
+.floating-nav__text{ overflow: hidden; text-overflow: ellipsis; }
+.floating-nav__sep{ width: 1px; align-self: stretch; background: var(--line); margin: 4px 0; }
+
+@media (max-width: 520px){
+  .floating-nav{ bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 5px 6px; }
+  .floating-nav__link{ padding: 8px 10px; }
+  .floating-nav__link .floating-nav__text{ max-width: 30vw; }
+}
+
 .chapter-header{ margin-bottom: 28px; }
 .chapter-header h1{
   font-family: var(--font-display); font-weight:600;
