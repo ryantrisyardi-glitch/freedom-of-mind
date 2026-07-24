@@ -55,11 +55,16 @@ service cloud.firestore {
 
     match /comments/{commentId} {
       allow read: if true;
-      allow create: if isSignedIn()
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.text.size() > 0
-        && request.resource.data.text.size() < 2000;
-      allow delete: if isSignedIn() && request.auth.uid == resource.data.uid;
+      allow create: if
+        request.resource.data.text.size() > 0
+        && request.resource.data.text.size() < 2000
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() < 80
+        && (
+          (isSignedIn() && request.resource.data.uid == request.auth.uid) ||
+          (!isSignedIn() && request.resource.data.uid == null)
+        );
+      allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.uid);
       allow update: if false;
     }
 
@@ -83,6 +88,18 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    // Detail per-kunjungan (satu dokumen per pemuatan halaman) — dipakai
+    // admin untuk melihat lokasi & jam kunjungan secara rinci, bukan cuma
+    // ringkasan harian. Semua boleh tulis (termasuk anonim), hanya admin
+    // yang bisa baca; tidak ada yang boleh mengubah/menghapus selain lewat
+    // update terbatas (uid/name/title) segera setelah dibuat.
+    match /visitLogs/{docId} {
+      allow read: if isAdmin();
+      allow create: if true;
+      allow update: if true; // dipakai untuk melengkapi uid/name/title setelah dibuat
+      allow delete: if isAdmin();
+    }
+
     // Riwayat halaman yang dikunjungi per reader per hari.
     match /readerVisits/{docId} {
       allow read: if isAdmin();
@@ -92,6 +109,10 @@ service cloud.firestore {
   }
 }
 ```
+
+3. Klik **Publish**.
+
+> ⚠️ **Penting**: Aturan `comments` di atas sudah diperbarui supaya **tamu (belum login) juga bisa berkomentar**, bukan cuma yang login Google, dan ada koleksi baru `visitLogs` untuk detail kunjungan per-jam. Kalau situsmu sudah pernah di-setup sebelumnya, salin ulang SELURUH blok Rules di atas ke tab **Rules** di Firebase Console lalu klik **Publish** lagi — perubahan di file ini saja tidak otomatis berlaku, karena Firestore Rules disimpan di server Firebase, bukan di file statis situs.
 
 3. Klik **Publish**.
 

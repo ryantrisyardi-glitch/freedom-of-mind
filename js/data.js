@@ -3,7 +3,10 @@
 // Koleksi:
 //   chapters: { id, judul, deskripsi, gambar, tagline, urutan, createdAt, deletedAt }
 //   notes:    { id, chapterId, judul, contentHtml, tag[], urutan, createdAt, updatedAt, deletedAt }
-//   comments: { id, noteId, uid, name, photoURL, text, createdAt }
+//   comments: { id, noteId, uid (null=tamu), name, photoURL, text, location:{city,country}|null, createdAt }
+//   visitLogs: { id, path, type, refId, title, country, city, deviceType, browser, os, uid|null, name, createdAt }
+//     (satu dokumen per pemuatan halaman — dipakai untuk detail per-jam di admin,
+//      terpisah dari agregat harian di koleksi pageViews)
 //   admins:   { id = email, addedBy, addedAt }
 //
 // Soft delete: deletedAt == null  -> aktif (tampil normal)
@@ -284,13 +287,14 @@ export function uploadToCloudinary(file, onProgress) {
 
 // ---------- Comments ----------
 
-export async function addComment({ noteId, uid, name, photoURL, text }) {
+export async function addComment({ noteId, uid, name, photoURL, text, location }) {
   return addDoc(collection(db, "comments"), {
     noteId,
-    uid,
-    name,
+    uid: uid || null,           // null = komentar sebagai tamu/guest
+    name: name || "Tamu",
     photoURL: photoURL || "",
     text,
+    location: location || null, // { city, country } dari IP, tanpa prompt izin
     createdAt: serverTimestamp(),
     deletedAt: null,
   });
@@ -303,6 +307,15 @@ export async function deleteComment(commentId) {
 export function listenComments(noteId, onChange, onError) {
   const q = query(collection(db, "comments"), where("noteId", "==", noteId), orderBy("createdAt", "asc"));
   return onSnapshot(q, (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(c => !c.deletedAt)), onError);
+}
+
+/** Semua komentar (lintas catatan) untuk keperluan tab Analitik di admin. */
+export async function getAllComments() {
+  const snap = await getDocs(collection(db, "comments"));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((c) => !c.deletedAt)
+    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 }
 
 // ---------- Admins ----------
@@ -377,6 +390,25 @@ export async function getPopularPages(limitN = 15) {
     }
   });
   return Object.values(byPath).sort((a, b) => b.views - a.views).slice(0, limitN);
+}
+
+/**
+ * Detail kunjungan per-baris (bukan agregat) — dipakai admin untuk melihat
+ * "siapa buka apa jam berapa dari kota mana". Ambil N hari terakhir,
+ * filter jam/tanggal dilakukan di sisi client (admin-page.js).
+ */
+export async function getVisitLogs(days = 14, limitN = 1000) {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+  const snap = await getDocs(
+    query(
+      collection(db, "visitLogs"),
+      where("createdAt", ">=", Timestamp.fromDate(startDate)),
+      orderBy("createdAt", "desc"),
+      limit(limitN)
+    )
+  );
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
 export { increment };

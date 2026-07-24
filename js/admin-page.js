@@ -6,7 +6,8 @@ import { initApp, onAuthReady, currentUser, currentIsAdmin, showConfirm } from "
 import {
   getAllAdmins, addAdmin, removeAdmin,
   getAllReaders, deleteReader,
-  getPageViewStats, getPopularPages,
+  getPageViewStats, getPopularPages, getVisitLogs,
+  getAllComments,
   getAllNotes, updateNote,
   backupAllData, restoreAllData,
 } from "./data.js";
@@ -18,7 +19,8 @@ function isSuperadmin() {
 }
 
 let activeTab = "analytics";
-let admins = [], readers = [], pageStats = [], popularPages = [];
+let admins = [], readers = [], pageStats = [], popularPages = [], comments = [], visitLogs = [];
+let visitFilterDate = "", visitFilterHourFrom = 0, visitFilterHourTo = 23;
 
 async function loadAndRender() {
   const root = document.getElementById("adminRoot");
@@ -32,8 +34,8 @@ async function loadAndRender() {
   }
   root.innerHTML = '<div class="empty-state">Memuat data...</div>';
   try {
-    [admins, readers, pageStats, popularPages] = await Promise.all([
-      getAllAdmins(), getAllReaders(), getPageViewStats(30), getPopularPages(10),
+    [admins, readers, pageStats, popularPages, comments, visitLogs] = await Promise.all([
+      getAllAdmins(), getAllReaders(), getPageViewStats(30), getPopularPages(10), getAllComments(), getVisitLogs(14),
     ]);
   } catch (err) {
     root.innerHTML = '<div class="empty-state">Gagal memuat: ' + (err.message || "") + "</div>";
@@ -62,6 +64,21 @@ function render() {
   root.querySelectorAll(".admin-tab").forEach(function(b) {
     b.addEventListener("click", function() { activeTab = b.dataset.tab; render(); });
   });
+  if (activeTab === "analytics") {
+    var applyBtn = document.getElementById("visitFilterApplyBtn");
+    if (applyBtn) applyBtn.addEventListener("click", function() {
+      visitFilterDate = document.getElementById("visitFilterDateInput").value || "";
+      visitFilterHourFrom = parseInt(document.getElementById("visitFilterFromInput").value, 10) || 0;
+      visitFilterHourTo = parseInt(document.getElementById("visitFilterToInput").value, 10);
+      if (isNaN(visitFilterHourTo)) visitFilterHourTo = 23;
+      render();
+    });
+    var resetBtn = document.getElementById("visitFilterResetBtn");
+    if (resetBtn) resetBtn.addEventListener("click", function() {
+      visitFilterDate = ""; visitFilterHourFrom = 0; visitFilterHourTo = 23;
+      render();
+    });
+  }
   if (activeTab === "readers") {
     root.querySelectorAll("[data-del-reader]").forEach(function(b) {
       b.addEventListener("click", function() { handleDeleteReader(b.dataset.delReader); });
@@ -129,6 +146,17 @@ function renderAnalytics() {
   var newReaders = readers.filter(function(r) { return isNew(r.firstSeen); }).length;
   var ga4Active  = window.GA_MEASUREMENT_ID && window.GA_MEASUREMENT_ID !== "G-XXXXXXXXXX";
 
+  var totalComments = comments.length;
+  var guestComments = comments.filter(function(c) { return !c.uid; }).length;
+  var commentCountries = {}, commentCities = {};
+  comments.forEach(function(c) {
+    var loc = c.location;
+    if (!loc) return;
+    if (loc.country) commentCountries[loc.country] = (commentCountries[loc.country] || 0) + 1;
+    if (loc.city)    commentCities[loc.city]       = (commentCities[loc.city]       || 0) + 1;
+  });
+  var recentComments = comments.slice(0, 8);
+
   var last7  = [];
   for (var i = 6; i >= 0; i--) last7.push(daysAgo(i));
   var max7   = 1;
@@ -144,7 +172,8 @@ function renderAnalytics() {
     statCard("7 Hari",          weekViews,  "kunjungan",    weekUniq  + " unik") +
     statCard("30 Hari",         monthViews, "kunjungan",    monthUniq + " unik") +
     statCard("Durasi Rata-rata",avgDurStr,  "per sesi",     totalReadSessions + " sesi") +
-    statCard("Pembaca Login",   readers.length, "akun",     newReaders + " baru (7h)");
+    statCard("Pembaca Login",   readers.length, "akun",     newReaders + " baru (7h)") +
+    statCard("Komentar",        totalComments, "total",     guestComments + " dari tamu");
 
   var bars = last7.map(function(d) {
     var v = dailyMap[d] || 0;
@@ -177,6 +206,26 @@ function renderAnalytics() {
           "</div>";
       }).join("");
 
+  var recentCommentRows = recentComments.length === 0
+    ? '<p class="empty-state" style="margin:12px 0;font-size:.85rem">Belum ada komentar.</p>'
+    : recentComments.map(function(c) {
+        var loc = c.location && (c.location.city || c.location.country)
+          ? [c.location.city, c.location.country].filter(Boolean).join(", ")
+          : "lokasi tidak diketahui";
+        var badge = c.uid ? "login" : "tamu";
+        var snippet = (c.text || "").slice(0, 90) + ((c.text || "").length > 90 ? "…" : "");
+        return '<div class="popular-row">' +
+          '<div class="popular-row__info">' +
+            '<span class="popular-row__title">' + escHtml(c.name || "Anonim") +
+              ' <span style="font-family:var(--font-mono);font-size:10px;color:var(--sage);border:1px solid var(--line);border-radius:999px;padding:1px 6px;margin-left:4px;">' + badge + '</span></span>' +
+            '<div style="font-size:.82rem;color:var(--ink-soft);margin-top:2px;">' + escHtml(snippet) + '</div>' +
+          '</div>' +
+          '<div class="popular-row__right">' +
+            '<span class="popular-row__count">' + escHtml(loc) + '</span>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+
   return banner +
     '<div class="stat-grid">' + cards + "</div>" +
     '<div class="stat-section">' +
@@ -196,7 +245,78 @@ function renderAnalytics() {
       breakdownCard("Negara",   countries, []) +
       breakdownCard("Kota",     cities,    []) +
       breakdownCard("Pembaca",  {"Baru (7h)": newReaders, "Kembali": Math.max(0, readers.length - newReaders)}, []) +
+    "</div>" +
+    renderVisitLogSection() +
+    '<div class="stat-section">' +
+      '<h3 class="stat-section__title">Asal Komentar (kota/negara dari IP)</h3>' +
+      '<div class="stat-row-3">' +
+        breakdownCard("Negara (Komentar)", commentCountries, []) +
+        breakdownCard("Kota (Komentar)",   commentCities,    []) +
+        breakdownCard("Jenis Komentator",  {"Tamu": guestComments, "Login": totalComments - guestComments}, []) +
+      "</div>" +
+    "</div>" +
+    '<div class="stat-section">' +
+      '<h3 class="stat-section__title">Komentar Terbaru</h3>' +
+      '<div class="popular-list">' + recentCommentRows + "</div>" +
     "</div>";
+}
+
+// ---- Detail kunjungan per-baris, dengan filter tanggal & rentang jam ----
+function renderVisitLogSection() {
+  var hourOptionsFrom = "", hourOptionsTo = "";
+  for (var h = 0; h < 24; h++) {
+    var label = String(h).padStart(2, "0") + ":00";
+    hourOptionsFrom += '<option value="' + h + '"' + (h === visitFilterHourFrom ? " selected" : "") + '>' + label + '</option>';
+    hourOptionsTo   += '<option value="' + h + '"' + (h === visitFilterHourTo   ? " selected" : "") + '>' + label + '</option>';
+  }
+
+  var filtered = visitLogs.filter(function(v) {
+    if (!v.createdAt || !v.createdAt.seconds) return false;
+    var d = new Date(v.createdAt.seconds * 1000);
+    if (visitFilterDate) {
+      var dateStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      if (dateStr !== visitFilterDate) return false;
+    }
+    var hour = d.getHours();
+    if (hour < visitFilterHourFrom || hour > visitFilterHourTo) return false;
+    return true;
+  });
+
+  var rows = filtered.length === 0
+    ? '<p class="empty-state" style="margin:12px 0;font-size:.85rem">Tidak ada kunjungan pada rentang waktu ini.</p>'
+    : filtered.slice(0, 200).map(function(v) {
+        var d = new Date(v.createdAt.seconds * 1000);
+        var waktu = d.toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+        var loc = [v.city, v.country].filter(Boolean).join(", ") || "tidak diketahui";
+        var who = v.uid ? (escHtml(v.name || "Pembaca login")) : "Tamu";
+        var icon = v.type === "chapter" ? "[Bab]" : v.type === "note" ? "[Cat]" : v.type === "admin" ? "[Admin]" : v.type === "editor" ? "[Editor]" : "[Hal]";
+        return '<div class="visitlog-row">' +
+          '<span class="visitlog-row__time">' + waktu + '</span>' +
+          '<span class="visitlog-row__page">' + icon + " " + escHtml(v.title || v.path || "") + '</span>' +
+          '<span class="visitlog-row__loc">' + escHtml(loc) + '</span>' +
+          '<span class="visitlog-row__device">' + escHtml(v.deviceType || "") + " · " + escHtml(v.browser || "") + '</span>' +
+          '<span class="visitlog-row__who">' + who + '</span>' +
+        '</div>';
+      }).join("");
+
+  return '<div class="stat-section">' +
+    '<h3 class="stat-section__title">Detail Kunjungan (per jam)</h3>' +
+    '<div class="visitlog-filter">' +
+      '<label>Tanggal <input type="date" id="visitFilterDateInput" value="' + visitFilterDate + '"></label>' +
+      '<label>Dari jam <select id="visitFilterFromInput">' + hourOptionsFrom + '</select></label>' +
+      '<label>Sampai jam <select id="visitFilterToInput">' + hourOptionsTo + '</select></label>' +
+      '<button class="btn" id="visitFilterApplyBtn">Terapkan</button>' +
+      '<button class="btn" id="visitFilterResetBtn">Reset</button>' +
+      '<span class="visitlog-filter__count">' + filtered.length + ' kunjungan' + (filtered.length > 200 ? " (menampilkan 200 pertama)" : "") + '</span>' +
+    '</div>' +
+    '<div class="visitlog-list">' +
+      '<div class="visitlog-row visitlog-row--head">' +
+        '<span>Waktu</span><span>Halaman</span><span>Lokasi</span><span>Perangkat</span><span>Pembaca</span>' +
+      '</div>' +
+      rows +
+    '</div>' +
+    '<p class="stat-note">Data 14 hari terakhir, disimpan per kunjungan (bukan agregat) — lokasi berasal dari IP (kota/negara saja).</p>' +
+  '</div>';
 }
 
 function statCard(label, value, unit, sub) {
@@ -229,7 +349,7 @@ function breakdownCard(title, data, labelPairs) {
         return '<div class="breakdown-row">' +
           "<span>" + escHtml(lbl) + "</span>" +
           '<div class="breakdown-bar"><div style="width:' + pct + '%"></div></div>' +
-          "<span>" + pct + "%</span>" +
+          "<span>" + v + " (" + pct + "%)</span>" +
           "</div>";
       }).join("");
 

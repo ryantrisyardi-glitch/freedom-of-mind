@@ -2,7 +2,7 @@
 // NOTE PAGE — render satu catatan, share bar, komentar
 // =========================================================
 
-import { initAnalytics, updateAnalyticsTitle } from "./analytics.js";
+import { initAnalytics, updateAnalyticsTitle, getVisitorLocation } from "./analytics.js";
 import { initApp, onAuthReady, currentUser, currentIsAdmin, showConfirm } from "./ui-shared.js";
 import { getNote, getChapter, addComment, deleteComment, listenComments, publishNote, unpublishNote } from "./data.js";
 import { auth, googleSignIn } from "./firebase-core.js";
@@ -60,50 +60,72 @@ function renderAuthArea() {
     area.innerHTML = `
       <div class="user-chip">
         <img src="${currentUser.photoURL || ""}" alt="">
-        <span>${currentUser.displayName}</span>
+        <span>${escapeHtml(currentUser.displayName)}</span>
       </div>
     `;
-    renderCommentForm();
   } else {
-    area.innerHTML = `<button class="btn-google" id="signInBtn">Masuk dengan Google untuk berkomentar</button>`;
-    document.getElementById("signInBtn").addEventListener("click", async () => {
+    area.innerHTML = `
+      <p class="comments__signin-hint">
+        Berkomentar sebagai tamu di bawah, atau
+        <button class="btn-google-inline" id="signInBtn">masuk dengan Google</button> supaya nama & fotomu tersimpan.
+      </p>
+    `;
+    document.getElementById("signInBtn")?.addEventListener("click", async () => {
       try { await googleSignIn(); } catch (err) { alert("Gagal masuk: " + err.message); }
     });
-    const slot = document.getElementById("commentFormSlot");
-    if (slot) slot.innerHTML = "";
   }
+  renderCommentForm();
+}
+
+function getGuestName() {
+  try { return localStorage.getItem("fom-guest-name") || ""; } catch { return ""; }
+}
+function setGuestName(name) {
+  try { localStorage.setItem("fom-guest-name", name); } catch { /* abaikan */ }
 }
 
 function renderCommentForm() {
   const slot = document.getElementById("commentFormSlot");
   if (!slot) return;
+  const isGuest = !currentUser;
   slot.innerHTML = `
     <div class="comment-form">
+      ${isGuest ? `<input type="text" id="commentGuestName" class="comment-form__name" placeholder="Nama kamu (boleh nama panggilan)" maxlength="60" value="${escapeHtml(getGuestName())}">` : ""}
       <textarea id="commentText" placeholder="Tulis tanggapanmu di sini..." maxlength="2000"></textarea>
       <div class="comment-form__row">
         <button class="btn btn-primary" id="submitCommentBtn">Kirim komentar</button>
+        ${isGuest ? `<span class="comment-form__hint">Dikirim sebagai tamu — lokasi kota/negara (dari IP) ikut tersimpan untuk statistik.</span>` : ""}
       </div>
     </div>
   `;
   document.getElementById("submitCommentBtn").addEventListener("click", async () => {
     const textarea = document.getElementById("commentText");
+    const nameInput = document.getElementById("commentGuestName");
     const btn = document.getElementById("submitCommentBtn");
     const text = textarea.value.trim();
     if (!text) return;
+
+    let name = currentUser ? currentUser.displayName : (nameInput?.value.trim() || "Tamu");
+    if (isGuest && nameInput) setGuestName(nameInput.value.trim());
+
     btn.disabled = true;
+    btn.textContent = "Mengirim…";
     try {
+      const location = await getVisitorLocation().catch(() => null);
       await addComment({
         noteId: note.id,
-        uid: currentUser.uid,
-        name: currentUser.displayName,
-        photoURL: currentUser.photoURL || "",
+        uid: currentUser ? currentUser.uid : null,
+        name,
+        photoURL: currentUser ? (currentUser.photoURL || "") : "",
         text,
+        location,
       });
       textarea.value = "";
     } catch (err) {
       alert("Gagal mengirim komentar: " + err.message);
     } finally {
       btn.disabled = false;
+      btn.textContent = "Kirim komentar";
     }
   });
 }
@@ -117,10 +139,13 @@ function renderComments(list) {
   }
   el.innerHTML = list.map((c) => `
     <div class="comment" data-comment-id="${c.id}">
-      <img src="${c.photoURL || ""}" alt="" onerror="this.style.visibility='hidden'">
+      ${c.photoURL
+        ? `<img src="${c.photoURL}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'comment__avatar-fallback',textContent:'👤'}))">`
+        : `<div class="comment__avatar-fallback">👤</div>`}
       <div class="comment__body">
         <div class="comment__header">
           <span class="comment__name">${escapeHtml(c.name || "Anonim")}</span>
+          ${!c.uid ? `<span class="comment__guest-badge">Tamu</span>` : ""}
           <span class="comment__time">${formatWaktu(c.createdAt)}</span>
           ${currentIsAdmin ? `<button class="comment__delete-btn btn-icon btn-danger btn" data-comment-id="${c.id}" title="Hapus komentar">🗑</button>` : ""}
         </div>

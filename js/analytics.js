@@ -4,7 +4,7 @@
 
 import { db } from "./firebase-core.js";
 import {
-  doc, setDoc, serverTimestamp, increment,
+  doc, setDoc, addDoc, updateDoc, collection, serverTimestamp, increment,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ---- GA4 ----
@@ -77,6 +77,13 @@ async function getLocation() {
   } catch { return { country: "", city: "" }; }
 }
 
+// Dipakai fitur lain (mis. komentar) yang butuh lokasi kasar (kota/negara)
+// dari IP — TANPA prompt izin apa pun, dan memakai cache sesi yang sama
+// dengan yang sudah dipakai untuk pageViews, supaya tidak boros kuota API.
+export async function getVisitorLocation() {
+  return getLocation();
+}
+
 function safeGeoKey(str) {
   return (str || "unknown").replace(/[^a-zA-Z0-9]/g, "_").replace(/_+/g, "_").slice(0, 40);
 }
@@ -85,6 +92,30 @@ function safeGeoKey(str) {
 let _currentDocId  = null;
 let _page          = null;
 let _pageTracked   = false;
+let _visitLogRef   = null;
+
+// ---- Log detail per-kunjungan (satu dokumen per pemuatan halaman) ----
+// Ini TERPISAH dari agregat harian di atas — tujuannya supaya admin bisa
+// melihat detail "siapa buka apa jam berapa dari kota mana", bukan cuma
+// ringkasan persentase.
+async function logVisitDetail(page, device, loc) {
+  try {
+    _visitLogRef = await addDoc(collection(db, "visitLogs"), {
+      path: page.path,
+      type: page.type,
+      refId: page.refId,
+      title: page.title,
+      country: loc.country || "",
+      city: loc.city || "",
+      deviceType: device.type,
+      browser: device.browser,
+      os: device.os,
+      uid: null,
+      name: "",
+      createdAt: serverTimestamp(),
+    });
+  } catch { /* silent fail — tidak kritis */ }
+}
 
 // ---- Track page view (semua pengunjung termasuk anonim) ----
 async function trackPageView(page, device) {
@@ -103,6 +134,8 @@ async function trackPageView(page, device) {
   const loc        = await getLocation();
   const cCountry   = safeGeoKey(loc.country);
   const cCity      = safeGeoKey(loc.city);
+
+  logVisitDetail(page, device, loc); // tidak perlu ditunggu (await) — tidak kritis
 
   try {
     await setDoc(doc(db, "pageViews", _currentDocId), {
@@ -139,6 +172,9 @@ export async function updateAnalyticsTitle(realTitle) {
         [`pages_${_page.safeKey}`]: realTitle,
       }, { merge: true });
     }
+    if (_visitLogRef) {
+      await updateDoc(_visitLogRef, { title: realTitle }).catch(() => {});
+    }
   } catch {}
 }
 
@@ -171,6 +207,10 @@ async function trackReader(user, page, device) {
   window._analyticsUser = user; // simpan untuk updateAnalyticsTitle
 
   const loc = await getLocation(); // sudah cached dari trackPageView
+
+  if (_visitLogRef) {
+    updateDoc(_visitLogRef, { uid: user.uid, name: user.displayName || "" }).catch(() => {});
+  }
 
   try {
     await setDoc(doc(db, "readers", user.uid), {
