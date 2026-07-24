@@ -837,7 +837,12 @@ button{ font-family: inherit; }
 
 /* ---------- Admin tabs (Pembaca / Admin) ---------- */
 .admin-tabs{
-  display: flex; gap: 6px; margin-bottom: 22px; border-bottom: 1px solid var(--line); padding-bottom: 0;
+  display: flex; align-items: center; gap: 6px; margin-bottom: 22px; border-bottom: 1px solid var(--line);
+  padding-bottom: 0; flex-wrap: wrap;
+}
+.admin-tabs__spacer{ flex: 1 1 auto; }
+.admin-tabs__refreshed{
+  font-family: var(--font-mono); font-size: 11px; color: var(--sage); white-space: nowrap;
 }
 .admin-tab{
   background: none; border: none; border-bottom: 2px solid transparent; padding: 10px 16px;
@@ -915,6 +920,14 @@ button{ font-family: inherit; }
 .stat-card__unit{ font-size: .78rem; color: var(--ink-soft); margin: 2px 0 4px; }
 .stat-card__label{ font-family: var(--font-mono); font-size: 10.5px; color: var(--sage); text-transform:uppercase; letter-spacing:.06em; }
 .stat-card__sub{ font-family: var(--font-mono); font-size: 10px; color: var(--sage); margin-top: 4px; }
+.stat-card__trend{ margin-top: 6px; }
+.trend{
+  display: inline-block; font-family: var(--font-mono); font-size: 10.5px;
+  padding: 2px 8px; border-radius: 999px;
+}
+.trend--up{ color: var(--sage); background: rgba(122,150,122,0.12); }
+.trend--down{ color: var(--danger); background: rgba(181,72,59,0.1); }
+.trend--flat{ color: var(--ink-soft); background: var(--paper-card); }
 
 .stat-section{ margin-bottom: 28px; }
 
