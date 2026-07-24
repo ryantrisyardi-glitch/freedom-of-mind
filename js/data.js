@@ -411,6 +411,28 @@ export async function getVisitLogs(days = 14, limitN = 1000) {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
+/**
+ * Ambil daftar SEMUA kota yang pernah tercatat mengunjungi situs — tanpa
+ * batas tanggal (beda dari getPageViewStats yang dibatasi N hari untuk
+ * kartu statistik). Dipakai supaya breakdown "Kota" di dashboard Analitik
+ * menampilkan seluruh kota sepanjang masa, bukan cuma jendela hari terakhir.
+ * Menyisir field `cities_*` yang tersimpan pada tiap dokumen pageViews.
+ */
+export async function getAllCityStats() {
+  const snap = await getDocs(collection(db, "pageViews"));
+  const cities = {};
+  snap.docs.forEach((d) => {
+    const v = d.data();
+    Object.keys(v).forEach((k) => {
+      if (k.startsWith("cities_") && typeof v[k] === "number" && v[k] > 0) {
+        const city = k.slice(7);
+        cities[city] = (cities[city] || 0) + v[k];
+      }
+    });
+  });
+  return cities;
+}
+
 export { increment };
 
 // =========================================================

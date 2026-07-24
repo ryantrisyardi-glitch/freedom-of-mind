@@ -6,7 +6,7 @@ import { initApp, onAuthReady, currentUser, currentIsAdmin, showConfirm } from "
 import {
   getAllAdmins, addAdmin, removeAdmin,
   getAllReaders, deleteReader,
-  getPageViewStats, getPopularPages, getVisitLogs,
+  getPageViewStats, getPopularPages, getVisitLogs, getAllCityStats,
   getAllComments,
   getAllNotes, updateNote,
   backupAllData, restoreAllData,
@@ -20,8 +20,10 @@ function isSuperadmin() {
 
 let activeTab = "analytics";
 let admins = [], readers = [], pageStats = [], popularPages = [], comments = [], visitLogs = [];
+let allCityStats = {};
 let visitFilterDate = "", visitFilterHourFrom = 0, visitFilterHourTo = 23;
 let visitFilterWho = "all"; // "all" | "admin" | "nonadmin"
+let comparePeriod = "day"; // "hour" | "day" | "week" | "month" — untuk section Perbandingan Qty vs Qty Unik
 
 let loadErrors = {};
 
@@ -38,11 +40,15 @@ async function loadAndRender() {
   root.innerHTML = '<div class="empty-state">Memuat data...</div>';
 
   loadErrors = {};
+  // pageStats diambil 180 hari (bukan 30) supaya section "Perbandingan Qty vs
+  // Qty Unik" punya cukup data untuk bucket per-minggu & per-bulan. Kartu
+  // ringkasan (Hari ini/7 Hari/30 Hari) tetap memfilter dari data yang sama
+  // memakai batas tanggalnya masing-masing, jadi tidak ada yang berubah di situ.
   const results = await Promise.allSettled([
-    getAllAdmins(), getAllReaders(), getPageViewStats(30), getPopularPages(10), getAllComments(), getVisitLogs(14),
+    getAllAdmins(), getAllReaders(), getPageViewStats(180), getPopularPages(10), getAllComments(), getVisitLogs(14), getAllCityStats(),
   ]);
-  const keys = ["admins", "readers", "pageStats", "popularPages", "comments", "visitLogs"];
-  const fallbacks = [admins, readers, pageStats, popularPages, comments, visitLogs];
+  const keys = ["admins", "readers", "pageStats", "popularPages", "comments", "visitLogs", "allCityStats"];
+  const fallbacks = [admins, readers, pageStats, popularPages, comments, visitLogs, allCityStats];
   const values = results.map(function(r, i) {
     if (r.status === "fulfilled") return r.value;
     loadErrors[keys[i]] = (r.reason && r.reason.message) || String(r.reason);
@@ -50,6 +56,7 @@ async function loadAndRender() {
   });
   admins = values[0]; readers = values[1]; pageStats = values[2];
   popularPages = values[3]; comments = values[4]; visitLogs = values[5];
+  allCityStats = values[6] || {};
   lastLoadedAt = new Date();
 
   // Kalau SEMUA query gagal (mis. belum login/rules salah total), baru
@@ -115,6 +122,12 @@ function render() {
       visitFilterWho = whoInput.value;
       render();
     });
+    root.querySelectorAll("[data-compare-period]").forEach(function(b) {
+      b.addEventListener("click", function() {
+        comparePeriod = b.dataset.comparePeriod;
+        render();
+      });
+    });
   }
   if (activeTab === "readers") {
     root.querySelectorAll("[data-del-reader]").forEach(function(b) {
@@ -154,7 +167,7 @@ function renderAnalytics() {
   var todayUniq  = 0, weekUniq  = 0, monthUniq  = 0;
   var totalReadSecs = 0, totalReadSessions = 0;
   var devices = {}, browsers = {}, os = {}, countries = {}, cities = {};
-  var dailyMap = {};
+  var dailyMap = {}, dailyUniqMap = {};
 
   pageStats.forEach(function(v) {
     var views = v.views || 0;
@@ -162,7 +175,8 @@ function renderAnalytics() {
     if (v.date === today)    { todayViews += views; todayUniq += uniq; }
     if (v.date >= weekAgo)   { weekViews  += views; weekUniq  += uniq; }
     if (v.date >= monthAgo)  { monthViews += views; monthUniq += uniq; }
-    dailyMap[v.date] = (dailyMap[v.date] || 0) + views;
+    dailyMap[v.date]     = (dailyMap[v.date]     || 0) + views;
+    dailyUniqMap[v.date] = (dailyUniqMap[v.date] || 0) + uniq;
     totalReadSecs     += v.totalReadSeconds || 0;
     totalReadSessions += v.readSessions     || 0;
 
@@ -288,9 +302,10 @@ function renderAnalytics() {
     "</div>" +
     '<div class="stat-row-3">' +
       breakdownCard("Negara",   countries, []) +
-      breakdownCard("Kota",     cities,    []) +
+      breakdownCard("Kota (semua waktu)", allCityStats, [], 999) +
       breakdownCard("Pembaca",  {"Baru (7h)": newReaders, "Kembali": Math.max(0, readers.length - newReaders)}, []) +
     "</div>" +
+    renderComparisonSection(dailyMap, dailyUniqMap) +
     renderVisitLogSection() +
     '<div class="stat-section">' +
       '<h3 class="stat-section__title">Asal Komentar (kota/negara dari IP)</h3>' +
@@ -384,6 +399,136 @@ function renderVisitLogSection() {
   '</div>';
 }
 
+// ---- Perbandingan Qty (total kunjungan) vs Qty Unik, per jam/hari/minggu/bulan ----
+// "Jam" diambil dari visitLogs (detail per-kunjungan, 14 hari terakhir) karena
+// pageViews cuma agregat harian dan tidak menyimpan jam. "Hari/Minggu/Bulan"
+// diambil dari dailyMap/dailyUniqMap (agregat harian, s.d. 180 hari terakhir).
+function buildHourlyCompare() {
+  var qtyByHour = new Array(24).fill(0);
+  var seenByHour = new Array(24).fill(null).map(function() { return new Set(); });
+  visitLogs.forEach(function(v) {
+    if (!v.createdAt || !v.createdAt.seconds) return;
+    var d = new Date(v.createdAt.seconds * 1000);
+    var h = d.getHours();
+    qtyByHour[h]++;
+    // Proxy identitas unik: uid kalau login, kalau tidak pakai kombinasi
+    // kota+perangkat+browser+os sebagai fingerprint kasar per hari.
+    var dateStr = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
+    var identity = v.uid || [v.city, v.country, v.deviceType, v.browser, v.os].join("|");
+    seenByHour[h].add(dateStr + "::" + identity);
+  });
+  var groups = [];
+  for (var h = 0; h < 24; h++) {
+    groups.push({ label: String(h).padStart(2, "0"), qty: qtyByHour[h], uniq: seenByHour[h].size });
+  }
+  return { groups: groups, note: "Berdasarkan Detail Kunjungan 14 hari terakhir. \u201cUnik\u201d didekati dari kombinasi kota/perangkat/browser per hari (bukan cookie), karena data per-jam tidak menyimpan ID sesi." };
+}
+
+function buildDailyCompare(dailyMap, dailyUniqMap) {
+  var dates = Object.keys(dailyMap).sort();
+  var last = dates.slice(-14); // 14 hari terakhir biar chart tidak terlalu padat
+  var groups = last.map(function(d) {
+    return { label: d.slice(5), qty: dailyMap[d] || 0, uniq: dailyUniqMap[d] || 0 };
+  });
+  return { groups: groups, note: "14 hari terakhir dari data yang tersedia." };
+}
+
+function isoWeekKey(dateStr) {
+  var d = new Date(dateStr + "T00:00:00");
+  var day = (d.getDay() + 6) % 7; // Senin=0
+  d.setDate(d.getDate() - day + 3); // geser ke Kamis di minggu yang sama (ISO)
+  var firstThu = new Date(d.getFullYear(), 0, 4);
+  var firstDay = (firstThu.getDay() + 6) % 7;
+  firstThu.setDate(firstThu.getDate() - firstDay + 3);
+  var week = 1 + Math.round((d - firstThu) / (7 * 86400000));
+  return d.getFullYear() + "-W" + String(week).padStart(2, "0");
+}
+
+function buildWeeklyCompare(dailyMap, dailyUniqMap) {
+  var buckets = {};
+  Object.keys(dailyMap).sort().forEach(function(d) {
+    var wk = isoWeekKey(d);
+    if (!buckets[wk]) buckets[wk] = { qty: 0, uniq: 0 };
+    buckets[wk].qty  += dailyMap[d]     || 0;
+    buckets[wk].uniq += dailyUniqMap[d] || 0;
+  });
+  var keys = Object.keys(buckets).sort().slice(-12); // 12 minggu terakhir
+  var groups = keys.map(function(k) {
+    return { label: k.replace(/^\d{4}-/, ""), qty: buckets[k].qty, uniq: buckets[k].uniq };
+  });
+  return { groups: groups, note: "12 minggu terakhir (kalender ISO, Senin\u2013Minggu) dari data yang tersedia." };
+}
+
+function buildMonthlyCompare(dailyMap, dailyUniqMap) {
+  var buckets = {};
+  Object.keys(dailyMap).sort().forEach(function(d) {
+    var mk = d.slice(0, 7); // YYYY-MM
+    if (!buckets[mk]) buckets[mk] = { qty: 0, uniq: 0 };
+    buckets[mk].qty  += dailyMap[d]     || 0;
+    buckets[mk].uniq += dailyUniqMap[d] || 0;
+  });
+  var keys = Object.keys(buckets).sort();
+  var bulanSingkat = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+  var groups = keys.map(function(k) {
+    var parts = k.split("-");
+    var label = bulanSingkat[parseInt(parts[1], 10) - 1] + " " + parts[0].slice(2);
+    return { label: label, qty: buckets[k].qty, uniq: buckets[k].uniq };
+  });
+  return { groups: groups, note: "Seluruh bulan dari data yang tersedia (maks. 180 hari terakhir)." };
+}
+
+function renderComparisonSection(dailyMap, dailyUniqMap) {
+  var tabs = [
+    ["hour",  "Per Jam"],
+    ["day",   "Per Hari"],
+    ["week",  "Per Minggu"],
+    ["month", "Per Bulan"],
+  ];
+  var tabsHtml = tabs.map(function(t) {
+    var active = comparePeriod === t[0] ? " is-active" : "";
+    return '<button class="compare-tab' + active + '" data-compare-period="' + t[0] + '">' + t[1] + "</button>";
+  }).join("");
+
+  var built = comparePeriod === "hour"  ? buildHourlyCompare()
+            : comparePeriod === "week"  ? buildWeeklyCompare(dailyMap, dailyUniqMap)
+            : comparePeriod === "month" ? buildMonthlyCompare(dailyMap, dailyUniqMap)
+            : buildDailyCompare(dailyMap, dailyUniqMap);
+
+  var groups = built.groups;
+  var maxV = 1;
+  groups.forEach(function(g) { maxV = Math.max(maxV, g.qty, g.uniq); });
+
+  var totalQty = groups.reduce(function(a, g) { return a + g.qty; }, 0);
+  var totalUniq = groups.reduce(function(a, g) { return a + g.uniq; }, 0);
+  var pctUniq = totalQty > 0 ? Math.round((totalUniq / totalQty) * 100) : 0;
+
+  var cols = groups.length === 0
+    ? '<p class="empty-state" style="margin:12px 0;font-size:.85rem">Belum ada data untuk periode ini.</p>'
+    : groups.map(function(g) {
+        var hQty  = Math.round((g.qty  / maxV) * 100);
+        var hUniq = Math.round((g.uniq / maxV) * 100);
+        return '<div class="compare-chart__col" title="' + escHtml(g.label) + ": " + g.qty + " qty, " + g.uniq + ' unik">' +
+          '<div class="compare-chart__bars">' +
+            '<div class="compare-chart__bar compare-chart__bar--qty" style="height:' + hQty + '%"></div>' +
+            '<div class="compare-chart__bar compare-chart__bar--uniq" style="height:' + hUniq + '%"></div>' +
+          '</div>' +
+          '<div class="compare-chart__label">' + escHtml(g.label) + '</div>' +
+        '</div>';
+      }).join("");
+
+  return '<div class="stat-section">' +
+    '<h3 class="stat-section__title">Perbandingan Qty vs Qty Unik</h3>' +
+    '<div class="compare-tabs">' + tabsHtml + '</div>' +
+    '<div class="compare-summary">' +
+      '<span><span class="compare-dot compare-dot--qty"></span> Qty: <strong>' + totalQty.toLocaleString("id-ID") + '</strong></span>' +
+      '<span><span class="compare-dot compare-dot--uniq"></span> Qty Unik: <strong>' + totalUniq.toLocaleString("id-ID") + '</strong></span>' +
+      '<span>Rasio unik: <strong>' + pctUniq + '%</strong></span>' +
+    '</div>' +
+    '<div class="compare-chart">' + cols + '</div>' +
+    '<p class="stat-note">' + built.note + '</p>' +
+  '</div>';
+}
+
 function trendBadge(current, previous) {
   // Kalau baseline (previous) 0, persentase tidak bermakna (bisa "tak
   // terhingga") — tampilkan sebagai kunjungan baru murni, bukan %.
@@ -409,7 +554,7 @@ function statCard(label, value, unit, sub, trendHtml) {
     "</div>";
 }
 
-function breakdownCard(title, data, labelPairs) {
+function breakdownCard(title, data, labelPairs, maxRows) {
   var labelMap = {};
   labelPairs.forEach(function(p) {
     var parts = p.split(":");
@@ -417,7 +562,7 @@ function breakdownCard(title, data, labelPairs) {
   });
 
   var total  = Object.values(data).reduce(function(a, b) { return a + b; }, 0) || 1;
-  var sorted = Object.entries(data).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 6);
+  var sorted = Object.entries(data).sort(function(a, b) { return b[1] - a[1]; }).slice(0, maxRows || 6);
 
   var rows = sorted.length === 0
     ? '<p style="font-size:.82rem;color:var(--sage);margin:4px 0">Belum ada data</p>'
@@ -433,9 +578,10 @@ function breakdownCard(title, data, labelPairs) {
           "</div>";
       }).join("");
 
-  return '<div class="breakdown-card">' +
+  var scrollCls = sorted.length > 8 ? " breakdown-card--scroll" : "";
+  return '<div class="breakdown-card' + scrollCls + '">' +
     '<h4 class="breakdown-card__title">' + title + "</h4>" +
-    rows +
+    '<div class="breakdown-card__rows">' + rows + '</div>' +
     "</div>";
 }
 
