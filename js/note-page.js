@@ -3,7 +3,7 @@
 // =========================================================
 
 import { initAnalytics, updateAnalyticsTitle, getVisitorLocation } from "./analytics.js";
-import { initApp, onAuthReady, currentUser, currentIsAdmin, showConfirm } from "./ui-shared.js";
+import { initApp, onAuthReady, currentUser, currentIsAdmin, showConfirm, renderFloatingChapterNav } from "./ui-shared.js";
 import { getNote, getChapter, addComment, deleteComment, listenComments, publishNote, unpublishNote } from "./data.js";
 import { auth, googleSignIn } from "./firebase-core.js";
 
@@ -207,6 +207,13 @@ async function init() {
     <a href="index.html">← semua chapter</a>
     ${chapter ? ` · <a href="chapter.html?id=${chapter.id}">${escapeHtml(chapter.judul)}</a>` : ""}
   `;
+  // Tombol mengambang yang tetap terlihat berapa pun posisi scroll pembaca —
+  // supaya tidak perlu scroll balik ke atas untuk kembali ke submenu chapter
+  // atau ke menu utama semua chapter.
+  renderFloatingChapterNav({
+    chapterHref: chapter ? `chapter.html?id=${chapter.id}` : null,
+    chapterLabel: chapter ? chapter.judul : null,
+  });
 
   const tagsHtml = (note.tag || []).map((t) => `<span>#${escapeHtml(t)}</span>`).join(" ");
 

@@ -68,11 +68,39 @@ function renderTopnav() {
   document.getElementById("navSignOut")?.addEventListener("click", () => signOut());
 }
 
+function escHtmlLocal(str) {
+  return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 /**
- * Progress bar tipis yang selalu fixed di paling atas viewport — dipakai untuk
- * upload gambar di dalam editor, supaya selalu terlihat terlepas dari toolbar
- * mana (statis di atas / floating di pinggir) yang memicu upload-nya.
+ * Tombol navigasi mengambang, fixed ke viewport (bukan ke posisi scroll),
+ * supaya selalu terlihat mau pembaca ada di awal, tengah, atau bawah
+ * tulisan. Dipakai di note.html supaya pembaca selalu bisa langsung
+ * lompat ke submenu chapter tulisan ini, atau ke menu utama semua chapter,
+ * tanpa harus scroll balik ke atas dulu.
+ * chapterHref/chapterLabel opsional — kalau tidak ada (chapter tidak
+ * ditemukan), cuma tombol "semua chapter" yang ditampilkan.
  */
+export function renderFloatingChapterNav({ chapterHref, chapterLabel } = {}) {
+  let el = document.getElementById("floatingChapterNav");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "floatingChapterNav";
+    el.className = "floating-nav";
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `
+    ${chapterHref ? `
+      <a class="floating-nav__link" href="${chapterHref}" title="Kembali ke ${escHtmlLocal(chapterLabel || "chapter ini")}">
+        <span class="floating-nav__icon">📖</span><span class="floating-nav__text">${escHtmlLocal(chapterLabel || "Chapter")}</span>
+      </a>
+      <span class="floating-nav__sep"></span>
+    ` : ""}
+    <a class="floating-nav__link floating-nav__link--home" href="index.html" title="Semua chapter">
+      <span class="floating-nav__icon">☰</span><span class="floating-nav__text">Semua chapter</span>
+    </a>
+  `;
+}
 export function showGlobalUploadProgress() {
   let bar = document.getElementById("globalUploadProgress");
   if (!bar) {
