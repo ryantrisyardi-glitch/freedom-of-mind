@@ -2,7 +2,7 @@
 // ANALYTICS — Freedom of Mind
 // =========================================================
 
-import { db } from "./firebase-core.js";
+import { db, checkIsAdmin } from "./firebase-core.js";
 import {
   doc, setDoc, addDoc, updateDoc, collection, serverTimestamp, increment,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -89,32 +89,42 @@ function safeGeoKey(str) {
 }
 
 // ---- State ---
-let _currentDocId  = null;
-let _page          = null;
-let _pageTracked   = false;
-let _visitLogRef   = null;
+let _currentDocId     = null;
+let _page             = null;
+let _pageTracked      = false;
+let _visitLogRefReady = null; // Promise<DocumentReference|null> — lihat catatan di bawah
 
 // ---- Log detail per-kunjungan (satu dokumen per pemuatan halaman) ----
 // Ini TERPISAH dari agregat harian di atas — tujuannya supaya admin bisa
 // melihat detail "siapa buka apa jam berapa dari kota mana", bukan cuma
 // ringkasan persentase.
-async function logVisitDetail(page, device, loc) {
-  try {
-    _visitLogRef = await addDoc(collection(db, "visitLogs"), {
-      path: page.path,
-      type: page.type,
-      refId: page.refId,
-      title: page.title,
-      country: loc.country || "",
-      city: loc.city || "",
-      deviceType: device.type,
-      browser: device.browser,
-      os: device.os,
-      uid: null,
-      name: "",
-      createdAt: serverTimestamp(),
-    });
-  } catch { /* silent fail — tidak kritis */ }
+//
+// CATATAN PENTING: dulu ref dokumen ini disimpan di variabel biasa
+// (_visitLogRef) yang null sampai addDoc() selesai. Kalau status login
+// (fom:user-ready) selesai LEBIH DULU daripada addDoc() ini — yang sangat
+// umum terjadi untuk admin yang sesi login-nya sudah tersimpan browser —
+// trackReader() akan mengecek "if (_visitLogRef)", melihatnya masih null,
+// dan diam-diam melewatkan update uid/name. Akibatnya kunjungan admin
+// tercatat permanen sebagai uid:null alias "Tamu" di tabel Detail Kunjungan.
+// Sekarang disimpan sebagai Promise supaya trackReader() selalu MENUNGGU
+// dokumennya benar-benar ada, bukan cuma mengecek sesaat.
+function logVisitDetail(page, device, loc) {
+  _visitLogRefReady = addDoc(collection(db, "visitLogs"), {
+    path: page.path,
+    type: page.type,
+    refId: page.refId,
+    title: page.title,
+    country: loc.country || "",
+    city: loc.city || "",
+    deviceType: device.type,
+    browser: device.browser,
+    os: device.os,
+    uid: null,
+    name: "",
+    isAdmin: false,
+    createdAt: serverTimestamp(),
+  }).catch(() => null); // silent fail — tidak kritis
+  return _visitLogRefReady;
 }
 
 // ---- Track page view (semua pengunjung termasuk anonim) ----
@@ -172,8 +182,9 @@ export async function updateAnalyticsTitle(realTitle) {
         [`pages_${_page.safeKey}`]: realTitle,
       }, { merge: true });
     }
-    if (_visitLogRef) {
-      await updateDoc(_visitLogRef, { title: realTitle }).catch(() => {});
+    if (_visitLogRefReady) {
+      const ref = await _visitLogRefReady;
+      if (ref) await updateDoc(ref, { title: realTitle }).catch(() => {});
     }
   } catch {}
 }
@@ -206,10 +217,17 @@ async function trackReader(user, page, device) {
   if (!user) return;
   window._analyticsUser = user; // simpan untuk updateAnalyticsTitle
 
-  const loc = await getLocation(); // sudah cached dari trackPageView
+  const loc     = await getLocation(); // sudah cached dari trackPageView
+  const isAdmin = await checkIsAdmin(user.email).catch(() => false);
 
-  if (_visitLogRef) {
-    updateDoc(_visitLogRef, { uid: user.uid, name: user.displayName || "" }).catch(() => {});
+  // Tunggu dokumen visitLogs benar-benar tersedia (bukan cuma cek variabel
+  // yang mungkin belum terisi) sebelum menambahkan uid/name/isAdmin —
+  // ini yang tadinya bikin kunjungan admin nyangkut sebagai "Tamu".
+  if (_visitLogRefReady) {
+    const ref = await _visitLogRefReady;
+    if (ref) {
+      updateDoc(ref, { uid: user.uid, name: user.displayName || "", isAdmin }).catch(() => {});
+    }
   }
 
   try {
@@ -226,6 +244,7 @@ async function trackReader(user, page, device) {
       os:         device.os,
       country:    loc.country,
       city:       loc.city,
+      isAdmin:    isAdmin,
       pageCount:  increment(1),
     }, { merge: true });
 

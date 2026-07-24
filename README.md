@@ -64,8 +64,13 @@ service cloud.firestore {
           (isSignedIn() && request.resource.data.uid == request.auth.uid) ||
           (!isSignedIn() && request.resource.data.uid == null)
         );
+      // "Hapus komentar" di aplikasi sebenarnya BUKAN operasi delete Firestore,
+      // melainkan updateDoc() yang mengisi field deletedAt (soft-delete, supaya
+      // komentar bisa dipulihkan dari Trash). Karena itu allow update TIDAK BOLEH
+      // if false — kalau begitu, admin akan selalu dapat error "Missing or
+      // insufficient permissions" saat mencoba menghapus komentar manapun.
       allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.uid);
-      allow update: if false;
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.uid);
     }
 
     match /admins/{email} {
@@ -112,7 +117,7 @@ service cloud.firestore {
 
 3. Klik **Publish**.
 
-> ⚠️ **Penting**: Aturan `comments` di atas sudah diperbarui supaya **tamu (belum login) juga bisa berkomentar**, bukan cuma yang login Google, dan ada koleksi baru `visitLogs` untuk detail kunjungan per-jam. Kalau situsmu sudah pernah di-setup sebelumnya, salin ulang SELURUH blok Rules di atas ke tab **Rules** di Firebase Console lalu klik **Publish** lagi — perubahan di file ini saja tidak otomatis berlaku, karena Firestore Rules disimpan di server Firebase, bukan di file statis situs.
+> ⚠️ **Penting**: Aturan `comments` di atas sudah diperbarui supaya **tamu (belum login) juga bisa berkomentar**, bukan cuma yang login Google, dan ada koleksi baru `visitLogs` untuk detail kunjungan per-jam. **Aturan `comments` juga baru saja diperbaiki**: `allow update` sebelumnya `if false`, padahal tombol "Hapus komentar" di aplikasi sebenarnya melakukan `updateDoc` (soft-delete, biar bisa dipulihkan dari Trash) — bukan `deleteDoc`. Kombinasi itu bikin admin selalu gagal menghapus komentar dengan error "Missing or insufficient permissions". Kalau situsmu sudah pernah di-setup sebelumnya, salin ulang SELURUH blok Rules di atas ke tab **Rules** di Firebase Console lalu klik **Publish** lagi — perubahan di file ini saja tidak otomatis berlaku, karena Firestore Rules disimpan di server Firebase, bukan di file statis situs.
 
 3. Klik **Publish**.
 

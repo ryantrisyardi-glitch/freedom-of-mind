@@ -21,6 +21,7 @@ function isSuperadmin() {
 let activeTab = "analytics";
 let admins = [], readers = [], pageStats = [], popularPages = [], comments = [], visitLogs = [];
 let visitFilterDate = "", visitFilterHourFrom = 0, visitFilterHourTo = 23;
+let visitFilterWho = "all"; // "all" | "admin" | "nonadmin"
 
 let loadErrors = {};
 
@@ -91,7 +92,12 @@ function render() {
     });
     var resetBtn = document.getElementById("visitFilterResetBtn");
     if (resetBtn) resetBtn.addEventListener("click", function() {
-      visitFilterDate = ""; visitFilterHourFrom = 0; visitFilterHourTo = 23;
+      visitFilterDate = ""; visitFilterHourFrom = 0; visitFilterHourTo = 23; visitFilterWho = "all";
+      render();
+    });
+    var whoInput = document.getElementById("visitFilterWhoInput");
+    if (whoInput) whoInput.addEventListener("change", function() {
+      visitFilterWho = whoInput.value;
       render();
     });
   }
@@ -303,6 +309,8 @@ function renderVisitLogSection() {
     }
     var hour = d.getHours();
     if (hour < visitFilterHourFrom || hour > visitFilterHourTo) return false;
+    if (visitFilterWho === "admin" && !v.isAdmin) return false;
+    if (visitFilterWho === "nonadmin" && v.isAdmin) return false;
     return true;
   });
 
@@ -312,7 +320,12 @@ function renderVisitLogSection() {
         var d = new Date(v.createdAt.seconds * 1000);
         var waktu = d.toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
         var loc = [v.city, v.country].filter(Boolean).join(", ") || "tidak diketahui";
-        var who = v.uid ? (escHtml(v.name || "Pembaca login")) : "Tamu";
+        // Admin (v.isAdmin) TIDAK dianggap "Tamu" lagi walau field lama belum
+        // punya isAdmin (kunjungan sebelum update ini) — fallback tetap aman
+        // karena v.isAdmin hanya true kalau memang tercatat sebagai admin.
+        var who = v.isAdmin
+          ? (escHtml(v.name || "Admin") + ' <span class="badge-admin" style="font-size:.7em">admin</span>')
+          : (v.uid ? escHtml(v.name || "Pembaca login") : "Tamu");
         var icon = v.type === "chapter" ? "[Bab]" : v.type === "note" ? "[Cat]" : v.type === "admin" ? "[Admin]" : v.type === "editor" ? "[Editor]" : "[Hal]";
         return '<div class="visitlog-row">' +
           '<span class="visitlog-row__time">' + waktu + '</span>' +
@@ -329,6 +342,11 @@ function renderVisitLogSection() {
       '<label>Tanggal <input type="date" id="visitFilterDateInput" value="' + visitFilterDate + '"></label>' +
       '<label>Dari jam <select id="visitFilterFromInput">' + hourOptionsFrom + '</select></label>' +
       '<label>Sampai jam <select id="visitFilterToInput">' + hourOptionsTo + '</select></label>' +
+      '<label>Pengunjung <select id="visitFilterWhoInput">' +
+        '<option value="all"' + (visitFilterWho === "all" ? " selected" : "") + '>Semua</option>' +
+        '<option value="admin"' + (visitFilterWho === "admin" ? " selected" : "") + '>Admin saja</option>' +
+        '<option value="nonadmin"' + (visitFilterWho === "nonadmin" ? " selected" : "") + '>Non-admin saja</option>' +
+      '</select></label>' +
       '<button class="btn" id="visitFilterApplyBtn">Terapkan</button>' +
       '<button class="btn" id="visitFilterResetBtn">Reset</button>' +
       '<span class="visitlog-filter__count">' + filtered.length + ' kunjungan' + (filtered.length > 200 ? " (menampilkan 200 pertama)" : "") + '</span>' +
