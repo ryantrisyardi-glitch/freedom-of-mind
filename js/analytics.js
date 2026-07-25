@@ -59,6 +59,23 @@ function getPageInfo() {
   return { path, type, refId, safeKey, title: titleFallback };
 }
 
+// Potong oktet/segmen terakhir IP (level jaringan, bukan host persis) lalu
+// hash SHA-256 — supaya tidak pernah menyimpan IP asli sama sekali, cuma
+// "sidik jari" yang tidak bisa dibalik ke IP semula, tapi tetap konsisten
+// untuk mendeteksi kunjungan dari jaringan yang sama.
+async function hashIp(ip) {
+  if (!ip) return "";
+  var truncated = ip.indexOf(":") >= 0
+    ? ip.replace(/:[0-9a-f]*$/i, ":0")   // IPv6: buang segmen terakhir
+    : ip.replace(/\.\d+$/, ".0");          // IPv4: buang oktet terakhir
+  try {
+    var enc  = new TextEncoder().encode(truncated);
+    var buf  = await crypto.subtle.digest("SHA-256", enc);
+    var hex  = Array.from(new Uint8Array(buf)).map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
+    return hex.slice(0, 12); // 12 hex char cukup buat dedup, tidak perlu hash penuh
+  } catch { return ""; }
+}
+
 // ---- Geolokasi via ipapi.co (cache per session) ----
 async function getLocation() {
   const cached = sessionStorage.getItem("fom_geo");
@@ -68,13 +85,15 @@ async function getLocation() {
       { signal: AbortSignal.timeout(4000) });
     if (!res.ok) throw new Error();
     const geo = await res.json();
+    const ipHash = await hashIp(geo.ip || "");
     const loc = {
       country: (geo.country_name || "").replace(/[^a-zA-Z0-9 ]/g, "").trim(),
       city:    (geo.city    || "").replace(/[^a-zA-Z0-9 ]/g, "").trim(),
+      ipHash,
     };
     sessionStorage.setItem("fom_geo", JSON.stringify(loc));
     return loc;
-  } catch { return { country: "", city: "" }; }
+  } catch { return { country: "", city: "", ipHash: "" }; }
 }
 
 // Dipakai fitur lain (mis. komentar) yang butuh lokasi kasar (kota/negara)
@@ -116,6 +135,7 @@ function logVisitDetail(page, device, loc) {
     title: page.title,
     country: loc.country || "",
     city: loc.city || "",
+    ipHash: loc.ipHash || "",
     deviceType: device.type,
     browser: device.browser,
     os: device.os,

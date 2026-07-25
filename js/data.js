@@ -4,7 +4,10 @@
 //   chapters: { id, judul, deskripsi, gambar, tagline, urutan, createdAt, deletedAt }
 //   notes:    { id, chapterId, judul, contentHtml, tag[], urutan, createdAt, updatedAt, deletedAt }
 //   comments: { id, noteId, uid (null=tamu), name, photoURL, text, location:{city,country}|null, createdAt }
-//   visitLogs: { id, path, type, refId, title, country, city, deviceType, browser, os, uid|null, name, createdAt }
+//   visitLogs: { id, path, type, refId, title, country, city, ipHash, deviceType, browser, os, uid|null, name, createdAt }
+//     ipHash = hash SHA-256 (12 char) dari IP yang oktet/segmen terakhirnya
+//     sudah dibuang dulu — jadi TIDAK menyimpan IP asli, cuma sidik jari
+//     jaringan yang konsisten untuk mendeteksi kunjungan unik.
 //     (satu dokumen per pemuatan halaman — dipakai untuk detail per-jam di admin,
 //      terpisah dari agregat harian di koleksi pageViews)
 //   admins:   { id = email, addedBy, addedAt }
