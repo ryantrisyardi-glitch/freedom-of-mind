@@ -107,6 +107,52 @@ function safeGeoKey(str) {
   return (str || "unknown").replace(/[^a-zA-Z0-9]/g, "_").replace(/_+/g, "_").slice(0, 40);
 }
 
+// ---- Sumber kunjungan (referrer/UTM) — dihitung sekali per SESI, bukan per
+// halaman, supaya 1 orang yang baca 5 halaman tetap terhitung 1x di sumbernya
+// (bukan 5x). Prioritas: ?utm_source= di URL (paling akurat, cocok dipasang
+// manual di link yang dishare) → document.referrer (fallback otomatis).
+//
+// CATATAN PENTING: WhatsApp & Instagram (terutama in-app browser bawaan
+// mereka) SERING membuang/mengosongkan document.referrer demi privasi.
+// Jadi klik dari WA/IG tanpa ?utm_source= biasanya bakal kehitung "Langsung"
+// (direct), BUKAN "whatsapp"/"instagram" — ini keterbatasan browser, bukan
+// bug. Solusinya: tambahkan ?utm_source=whatsapp / ?utm_source=instagram
+// manual di link yang dishare ke platform itu.
+function detectSource() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const utm = params.get("utm_source");
+    if (utm) return safeGeoKey(utm.toLowerCase());
+
+    const ref = document.referrer;
+    if (!ref) return "direct"; // tanpa referrer & tanpa utm = akses langsung/bookmark/app in-app-browser yg strip referrer
+
+    const host = new URL(ref).hostname.replace(/^www\./, "").toLowerCase();
+    if (host.includes("whatsapp")) return "whatsapp";
+    if (host.includes("instagram")) return "instagram";
+    if (host.includes("facebook") || host.includes("fb.com") || host.includes("fb.me")) return "facebook";
+    if (host === "t.co" || host.includes("twitter") || host === "x.com") return "twitter_x";
+    if (host.includes("telegram") || host === "t.me") return "telegram";
+    if (host.includes("tiktok")) return "tiktok";
+    if (host.includes("google")) return "google";
+    if (host.includes("linkedin")) return "linkedin";
+    if (host.includes("youtube")) return "youtube";
+    if (host === window.location.hostname) return "direct"; // internal navigation (referrer situs sendiri) dianggap direct
+    return safeGeoKey(host);
+  } catch { return "direct"; }
+}
+
+// Sumber dihitung sekali per sesi (first-touch) dan dipakai ulang untuk semua
+// halaman yang dibuka dalam sesi yang sama — supaya konsisten "dari mana
+// awal orang ini masuk", bukan berubah-ubah tiap pindah halaman internal.
+function getSource() {
+  const cached = sessionStorage.getItem("fom_src");
+  if (cached) return cached;
+  const src = detectSource();
+  sessionStorage.setItem("fom_src", src);
+  return src;
+}
+
 // ---- State ---
 let _currentDocId     = null;
 let _page             = null;
@@ -127,7 +173,7 @@ let _visitLogRefReady = null; // Promise<DocumentReference|null> — lihat catat
 // tercatat permanen sebagai uid:null alias "Tamu" di tabel Detail Kunjungan.
 // Sekarang disimpan sebagai Promise supaya trackReader() selalu MENUNGGU
 // dokumennya benar-benar ada, bukan cuma mengecek sesaat.
-function logVisitDetail(page, device, loc) {
+function logVisitDetail(page, device, loc, source) {
   _visitLogRefReady = addDoc(collection(db, "visitLogs"), {
     path: page.path,
     type: page.type,
@@ -136,6 +182,7 @@ function logVisitDetail(page, device, loc) {
     country: loc.country || "",
     city: loc.city || "",
     ipHash: loc.ipHash || "",
+    source: source || "direct",
     deviceType: device.type,
     browser: device.browser,
     os: device.os,
@@ -160,12 +207,19 @@ async function trackPageView(page, device) {
   const isNew = !sessionStorage.getItem(sKey);
   if (isNew) sessionStorage.setItem(sKey, "1");
 
+  // Sumber kunjungan dihitung sekali per SESI (bukan per halaman) — lihat
+  // getSource(). isNewSession dipakai supaya 1 sesi cuma nambah 1x ke
+  // penghitung sources_*, walau sesi itu buka banyak halaman.
+  const isNewSession = !sessionStorage.getItem("fom_session_seen");
+  if (isNewSession) sessionStorage.setItem("fom_session_seen", "1");
+  const source = getSource();
+
   // Lokasi untuk SEMUA pengunjung (termasuk anonim)
   const loc        = await getLocation();
   const cCountry   = safeGeoKey(loc.country);
   const cCity      = safeGeoKey(loc.city);
 
-  logVisitDetail(page, device, loc); // tidak perlu ditunggu (await) — tidak kritis
+  logVisitDetail(page, device, loc, source); // tidak perlu ditunggu (await) — tidak kritis
 
   try {
     await setDoc(doc(db, "pageViews", _currentDocId), {
@@ -179,6 +233,9 @@ async function trackPageView(page, device) {
         uniqueVisitors: increment(1),
         [`countries_${cCountry}`]: increment(1),
         [`cities_${cCity}`]:       increment(1),
+      } : {}),
+      ...(isNewSession ? {
+        [`sources_${source}`]: increment(1),
       } : {}),
       [`devices_${device.type}`]:    increment(1),
       [`browsers_${device.browser}`]: increment(1),

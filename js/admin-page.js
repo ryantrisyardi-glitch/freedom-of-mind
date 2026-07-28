@@ -6,7 +6,7 @@ import { initApp, onAuthReady, currentUser, currentIsAdmin, showConfirm } from "
 import {
   getAllAdmins, addAdmin, removeAdmin,
   getAllReaders, deleteReader,
-  getPageViewStats, getPopularPages, getVisitLogs, getAllCityStats,
+  getPageViewStats, getPopularPages, getVisitLogs, getAllCityStats, getAllSourceStats,
   getAllComments,
   getAllNotes, updateNote,
   backupAllData, restoreAllData,
@@ -21,6 +21,7 @@ function isSuperadmin() {
 let activeTab = "analytics";
 let admins = [], readers = [], pageStats = [], popularPages = [], comments = [], visitLogs = [];
 let allCityStats = {};
+let allSourceStats = {};
 let visitFilterDate = "", visitFilterHourFrom = 0, visitFilterHourTo = 23;
 let visitFilterWho = "all"; // "all" | "admin" | "nonadmin"
 let comparePeriod = "day"; // "hour" | "day" | "week" | "month" — untuk section Perbandingan Qty vs Qty Unik
@@ -45,10 +46,10 @@ async function loadAndRender() {
   // ringkasan (Hari ini/7 Hari/30 Hari) tetap memfilter dari data yang sama
   // memakai batas tanggalnya masing-masing, jadi tidak ada yang berubah di situ.
   const results = await Promise.allSettled([
-    getAllAdmins(), getAllReaders(), getPageViewStats(180), getPopularPages(10), getAllComments(), getVisitLogs(90, 5000), getAllCityStats(),
+    getAllAdmins(), getAllReaders(), getPageViewStats(180), getPopularPages(10), getAllComments(), getVisitLogs(90, 5000), getAllCityStats(), getAllSourceStats(),
   ]);
-  const keys = ["admins", "readers", "pageStats", "popularPages", "comments", "visitLogs", "allCityStats"];
-  const fallbacks = [admins, readers, pageStats, popularPages, comments, visitLogs, allCityStats];
+  const keys = ["admins", "readers", "pageStats", "popularPages", "comments", "visitLogs", "allCityStats", "allSourceStats"];
+  const fallbacks = [admins, readers, pageStats, popularPages, comments, visitLogs, allCityStats, allSourceStats];
   const values = results.map(function(r, i) {
     if (r.status === "fulfilled") return r.value;
     loadErrors[keys[i]] = (r.reason && r.reason.message) || String(r.reason);
@@ -57,6 +58,7 @@ async function loadAndRender() {
   admins = values[0]; readers = values[1]; pageStats = values[2];
   popularPages = values[3]; comments = values[4]; visitLogs = values[5];
   allCityStats = values[6] || {};
+  allSourceStats = values[7] || {};
   lastLoadedAt = new Date();
 
   // Kalau SEMUA query gagal (mis. belum login/rules salah total), baru
@@ -303,6 +305,7 @@ function renderAnalytics() {
     '<div class="stat-row-3">' +
       breakdownCard("Negara",   countries, []) +
       breakdownCard("Kota (semua waktu)", allCityStats, [], 999) +
+      breakdownCard("Sumber Kunjungan (semua waktu)", humanizeSourceKeys(allSourceStats), [], 999) +
       breakdownCard("Pembaca",  {"Baru (7h)": newReaders, "Kembali": Math.max(0, readers.length - newReaders)}, []) +
     "</div>" +
     renderComparisonSection() +
@@ -369,6 +372,7 @@ function renderVisitLogSection() {
           '<span class="visitlog-row__time">' + waktu + '</span>' +
           '<span class="visitlog-row__page">' + icon + " " + escHtml(v.title || v.path || "") + '</span>' +
           '<span class="visitlog-row__loc">' + escHtml(loc) + '</span>' +
+          '<span class="visitlog-row__source">' + escHtml(humanizeSource(v.source || "direct")) + '</span>' +
           '<span class="visitlog-row__device">' + escHtml(v.deviceType || "") + " · " + escHtml(v.browser || "") + '</span>' +
           '<span class="visitlog-row__who">' + who + '</span>' +
         '</div>';
@@ -391,7 +395,7 @@ function renderVisitLogSection() {
     '</div>' +
     '<div class="visitlog-list">' +
       '<div class="visitlog-row visitlog-row--head">' +
-        '<span>Waktu</span><span>Halaman</span><span>Lokasi</span><span>Perangkat</span><span>Pembaca</span>' +
+        '<span>Waktu</span><span>Halaman</span><span>Lokasi</span><span>Sumber</span><span>Perangkat</span><span>Pembaca</span>' +
       '</div>' +
       rows +
     '</div>' +
@@ -498,6 +502,15 @@ function buildPageCompare() {
   return { groups: groups, note: "10 halaman paling banyak dikunjungi, 90 hari terakhir. \u201cUnik\u201d dihitung dari IP (di-hash) per halaman." };
 }
 
+function buildSourceCompare() {
+  var buckets = bucketVisitLogs(function(v) { return v.source || "direct"; });
+  var keys = Object.keys(buckets).sort(function(a, b) { return buckets[b].qty - buckets[a].qty; });
+  var groups = keys.map(function(k) {
+    return { label: humanizeSource(k), full: humanizeSource(k), qty: buckets[k].qty, uniq: buckets[k].uniq.size };
+  });
+  return { groups: groups, note: "90 hari terakhir. Sumber dari ?utm_source= atau referrer browser \u2014 klik dari WhatsApp/Instagram tanpa tag UTM sering kehitung \u201cLangsung\u201d karena app itu membuang referrer demi privasi." };
+}
+
 function renderComparisonSection() {
   var tabs = [
     ["hour",  "Per Jam"],
@@ -505,16 +518,18 @@ function renderComparisonSection() {
     ["week",  "Per Minggu"],
     ["month", "Per Bulan"],
     ["page",  "Per Halaman"],
+    ["source","Per Sumber"],
   ];
   var tabsHtml = tabs.map(function(t) {
     var active = comparePeriod === t[0] ? " is-active" : "";
     return '<button class="compare-tab' + active + '" data-compare-period="' + t[0] + '">' + t[1] + "</button>";
   }).join("");
 
-  var built = comparePeriod === "hour"  ? buildHourlyCompare()
-            : comparePeriod === "week"  ? buildWeeklyCompare()
-            : comparePeriod === "month" ? buildMonthlyCompare()
-            : comparePeriod === "page"  ? buildPageCompare()
+  var built = comparePeriod === "hour"   ? buildHourlyCompare()
+            : comparePeriod === "week"   ? buildWeeklyCompare()
+            : comparePeriod === "month"  ? buildMonthlyCompare()
+            : comparePeriod === "page"   ? buildPageCompare()
+            : comparePeriod === "source" ? buildSourceCompare()
             : buildDailyCompare();
 
   var groups = built.groups;
@@ -578,6 +593,38 @@ function statCard(label, value, unit, sub, trendHtml) {
     '<div class="stat-card__sub">' + sub + "</div>" +
     (trendHtml ? '<div class="stat-card__trend">' + trendHtml + "</div>" : "") +
     "</div>";
+}
+
+// Label yang enak dibaca untuk key sumber kunjungan (lihat detectSource() di
+// analytics.js). Key yang tidak dikenal (hostname mentah) ditampilkan apa
+// adanya dengan huruf awal kapital, supaya tetap kebaca meski bukan platform
+// yang sudah dikenali eksplisit.
+var SOURCE_LABELS = {
+  direct: "Langsung / Bookmark",
+  whatsapp: "WhatsApp",
+  instagram: "Instagram",
+  facebook: "Facebook",
+  twitter_x: "Twitter / X",
+  telegram: "Telegram",
+  tiktok: "TikTok",
+  google: "Google",
+  linkedin: "LinkedIn",
+  youtube: "YouTube",
+  unknown: "Tidak diketahui",
+};
+function humanizeSource(key) {
+  if (SOURCE_LABELS[key]) return SOURCE_LABELS[key];
+  return (key || "unknown").replace(/_/g, ".");
+}
+// breakdownCard butuh objek {label: qty} — sources_* disimpan dengan key
+// mentah (mis. "whatsapp", "some_blog_com"), jadi di-relabel dulu di sini.
+function humanizeSourceKeys(stats) {
+  var out = {};
+  Object.keys(stats).forEach(function(k) {
+    var label = humanizeSource(k);
+    out[label] = (out[label] || 0) + stats[k];
+  });
+  return out;
 }
 
 function breakdownCard(title, data, labelPairs, maxRows) {

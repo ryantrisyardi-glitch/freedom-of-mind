@@ -4,10 +4,12 @@
 //   chapters: { id, judul, deskripsi, gambar, tagline, urutan, createdAt, deletedAt }
 //   notes:    { id, chapterId, judul, contentHtml, tag[], urutan, createdAt, updatedAt, deletedAt }
 //   comments: { id, noteId, uid (null=tamu), name, photoURL, text, location:{city,country}|null, createdAt }
-//   visitLogs: { id, path, type, refId, title, country, city, ipHash, deviceType, browser, os, uid|null, name, createdAt }
+//   visitLogs: { id, path, type, refId, title, country, city, ipHash, source, deviceType, browser, os, uid|null, name, createdAt }
 //     ipHash = hash SHA-256 (12 char) dari IP yang oktet/segmen terakhirnya
 //     sudah dibuang dulu — jadi TIDAK menyimpan IP asli, cuma sidik jari
 //     jaringan yang konsisten untuk mendeteksi kunjungan unik.
+//     source = sumber kunjungan (whatsapp/instagram/facebook/google/direct/
+//     dst), dihitung sekali per sesi dari ?utm_source= atau document.referrer.
 //     (satu dokumen per pemuatan halaman — dipakai untuk detail per-jam di admin,
 //      terpisah dari agregat harian di koleksi pageViews)
 //   admins:   { id = email, addedBy, addedAt }
@@ -434,6 +436,27 @@ export async function getAllCityStats() {
     });
   });
   return cities;
+}
+
+/**
+ * Ambil breakdown SUMBER KUNJUNGAN (referrer/UTM) sepanjang masa — WhatsApp,
+ * Instagram, Facebook, Google, direct/langsung, dsb. Menyisir field
+ * `sources_*` yang tersimpan pada tiap dokumen pageViews (diisi sekali per
+ * sesi, lihat analytics.js -> getSource()/detectSource()).
+ */
+export async function getAllSourceStats() {
+  const snap = await getDocs(collection(db, "pageViews"));
+  const sources = {};
+  snap.docs.forEach((d) => {
+    const v = d.data();
+    Object.keys(v).forEach((k) => {
+      if (k.startsWith("sources_") && typeof v[k] === "number" && v[k] > 0) {
+        const src = k.slice(8);
+        sources[src] = (sources[src] || 0) + v[k];
+      }
+    });
+  });
+  return sources;
 }
 
 export { increment };
