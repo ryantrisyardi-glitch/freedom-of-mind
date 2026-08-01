@@ -773,6 +773,16 @@ button{ font-family: inherit; }
   padding: 7px 13px; border-radius: 999px; cursor:pointer;
 }
 .share-btn:hover{ border-color: var(--terracotta-dim); background: var(--paper); }
+.share-btn--whatsapp:hover{ border-color: #25D366; color: #128C4A; }
+.share-btn--instagram:hover{ border-color: #C13584; color: #C13584; }
+
+.share-toast{
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+  background: var(--ink); color: var(--paper); font-family: var(--font-mono); font-size: 12.5px;
+  padding: 10px 18px; border-radius: 999px; opacity: 0; pointer-events: none;
+  transition: opacity .25s ease, transform .25s ease; z-index: 999; max-width: 90vw; text-align: center;
+}
+.share-toast.is-visible{ opacity: 1; transform: translateX(-50%) translateY(0); }
 
 .comments{ margin-top: 46px; }
 .comments h3{ font-family: var(--font-display); font-size: 1.25rem; margin: 0 0 16px; }

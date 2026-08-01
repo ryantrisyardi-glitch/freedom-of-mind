@@ -30,15 +30,67 @@ function formatWaktu(ts) {
 
 let note, chapter;
 
+// Tempel/timpa ?utm_source= ke URL supaya kunjungan dari tombol share ini
+// kelihatan sumbernya di dashboard Analitik (lihat detectSource() di
+// analytics.js). Pakai URL() supaya query string lain (mis. ?id=xxx) tidak
+// ikut hilang atau rusak.
+function withUtm(url, source) {
+  try {
+    const u = new URL(url);
+    u.searchParams.set("utm_source", source);
+    return u.toString();
+  } catch { return url; }
+}
+
+function showShareToast(msg) {
+  let el = document.getElementById("shareToast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "shareToast";
+    el.className = "share-toast";
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.add("is-visible");
+  clearTimeout(showShareToast._t);
+  showShareToast._t = setTimeout(() => el.classList.remove("is-visible"), 3200);
+}
+
+// Instagram TIDAK punya web-intent resmi untuk share link+teks siap pakai
+// (beda dari WhatsApp/Twitter/Facebook) — jadi di HP/PWA yang mendukung Web
+// Share API, kita buka share sheet bawaan (Instagram muncul sebagai salah
+// satu pilihan kalau appnya terpasang). Kalau tidak didukung (kebanyakan
+// desktop), fallback: salin link yang sudah ditag ?utm_source=instagram ke
+// clipboard, lalu user tinggal paste ke Story/Bio/DM Instagram secara manual.
+async function shareInstagram(url, title) {
+  const igUrl = withUtm(url, "instagram");
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, url: igUrl });
+      return;
+    } catch { /* user membatalkan share sheet — lanjut fallback salin di bawah */ }
+  }
+  try {
+    await navigator.clipboard.writeText(igUrl);
+    showShareToast("Tautan Instagram tersalin ✓ — tempel di Story/Bio/DM kamu");
+  } catch {
+    showShareToast("Gagal menyalin tautan, coba salin manual dari address bar");
+  }
+}
+
 function renderShareBar() {
   const url = location.href;
   const title = note.judul;
+  const waUrl  = withUtm(url, "whatsapp");
+  const twUrl  = withUtm(url, "twitter_x");
+  const fbUrl  = withUtm(url, "facebook");
   document.getElementById("shareBar").innerHTML = `
     <span class="share-bar__label">Bagikan:</span>
     <button class="share-btn" id="copyLinkBtn">salin tautan</button>
-    <a class="share-btn" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(title + " — " + url)}">WhatsApp</a>
-    <a class="share-btn" target="_blank" rel="noopener" href="https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}">X / Twitter</a>
-    <a class="share-btn" target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}">Facebook</a>
+    <a class="share-btn share-btn--whatsapp" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(title + " — " + waUrl)}">WhatsApp</a>
+    <button class="share-btn share-btn--instagram" id="shareInstagramBtn" title="Instagram tidak mendukung share link otomatis — akan buka share sheet HP kamu, atau tautan disalin untuk ditempel manual">Instagram</button>
+    <a class="share-btn" target="_blank" rel="noopener" href="https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(twUrl)}">X / Twitter</a>
+    <a class="share-btn" target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fbUrl)}">Facebook</a>
   `;
   document.getElementById("copyLinkBtn").addEventListener("click", async (e) => {
     await navigator.clipboard.writeText(url);
@@ -47,6 +99,7 @@ function renderShareBar() {
     btn.textContent = "tersalin ✓";
     setTimeout(() => (btn.textContent = orig), 1800);
   });
+  document.getElementById("shareInstagramBtn").addEventListener("click", () => shareInstagram(url, title));
 }
 
 function renderAuthArea() {
