@@ -4,7 +4,7 @@
 
 import { initAnalytics, updateAnalyticsTitle, getVisitorLocation } from "./analytics.js";
 import { initApp, onAuthReady, currentUser, currentIsAdmin, showConfirm, renderFloatingChapterNav } from "./ui-shared.js";
-import { getNote, getChapter, addComment, deleteComment, listenComments, publishNote, unpublishNote } from "./data.js";
+import { getNote, getChapter, addComment, deleteComment, listenComments, publishNote, unpublishNote, getShortLinkByTarget } from "./data.js";
 import { auth, googleSignIn } from "./firebase-core.js";
 
 function getNoteId() {
@@ -78,8 +78,23 @@ async function shareInstagram(url, title) {
   }
 }
 
-function renderShareBar() {
-  const url = location.href;
+// Kalau catatan ini sudah punya tautan pendek (dibuat lewat admin.html ->
+// tab "Tautan Pendek"), pakai itu sebagai link yang dibagikan — bukan link
+// note.html?id=... yang panjang. Kalau belum ada, tetap pakai link asli
+// seperti biasa (tidak wajib bikin shortlink dulu).
+async function getShareBaseUrl() {
+  const target = "note.html?id=" + note.id;
+  try {
+    const link = await getShortLinkByTarget(target);
+    if (link) {
+      return location.origin + location.pathname.replace(/note\.html$/, "") + "s.html?c=" + encodeURIComponent(link.code);
+    }
+  } catch { /* gagal cek shortlink — fallback ke link panjang di bawah, tidak fatal */ }
+  return location.href;
+}
+
+async function renderShareBar() {
+  const url = await getShareBaseUrl();
   const title = note.judul;
   const waUrl  = withUtm(url, "whatsapp");
   const twUrl  = withUtm(url, "twitter_x");
@@ -345,7 +360,7 @@ async function init() {
   });
 
   if (!isDraft) {
-    renderShareBar();
+    renderShareBar(); // async, tidak perlu diblock — share bar muncul begitu link (pendek/panjang) selesai dicek
     renderAuthArea();
     listenComments(note.id, renderComments, (err) => {
       document.getElementById("commentList").innerHTML = `<p class="comments__empty">Gagal memuat komentar: ${err.message}</p>`;

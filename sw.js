@@ -14,7 +14,7 @@
 // "does not provide an export named 'backupAllData'": admin.html memuat
 // admin-page.js versi baru, tapi data.js yang dipanggilnya masih versi lama
 // dari cache (belum punya fungsi backupAllData/restoreAllData).
-const CACHE_NAME = "fom-shell-v16";
+const CACHE_NAME = "fom-shell-v17";
 
 const SHELL_FILES = [
   "./",

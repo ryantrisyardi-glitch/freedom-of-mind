@@ -491,6 +491,16 @@ export async function getShortLink(code) {
   return snap.exists() ? { code, ...snap.data() } : null;
 }
 
+/** Cari apakah sebuah halaman (mis. "note.html?id=xxx") sudah punya tautan
+ *  pendek — dipakai supaya tombol share otomatis pakai link pendek kalau
+ *  sudah dibuatkan, tanpa perlu diatur manual di tiap halaman. */
+export async function getShortLinkByTarget(target) {
+  const snap = await getDocs(query(collection(db, "shortlinks"), where("target", "==", target), limit(1)));
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { code: d.id, ...d.data() };
+}
+
 export async function bumpShortLinkHits(code) {
   await updateDoc(doc(db, "shortlinks", code), { hits: increment(1) }).catch(() => null);
 }
