@@ -111,13 +111,24 @@ service cloud.firestore {
       allow create, update: if isSignedIn();
       allow delete: if isSuperadmin();
     }
+
+    // Tautan pendek custom (mis. dibagikan ke Instagram lewat s.html).
+    // Siapa saja boleh BACA (supaya s.html bisa redirect untuk pengunjung
+    // anonim) dan boleh UPDATE (dipakai buat menaikkan hitungan klik/hits
+    // tiap ada yang buka linknya) — tapi hanya admin yang boleh membuat
+    // atau menghapus tautannya.
+    match /shortlinks/{code} {
+      allow read: if true;
+      allow update: if true;
+      allow create, delete: if isAdmin();
+    }
   }
 }
 ```
 
 3. Klik **Publish**.
 
-> ⚠️ **Penting**: Aturan `comments` di atas sudah diperbarui supaya **tamu (belum login) juga bisa berkomentar**, bukan cuma yang login Google, dan ada koleksi baru `visitLogs` untuk detail kunjungan per-jam. **Aturan `comments` juga baru saja diperbaiki**: `allow update` sebelumnya `if false`, padahal tombol "Hapus komentar" di aplikasi sebenarnya melakukan `updateDoc` (soft-delete, biar bisa dipulihkan dari Trash) — bukan `deleteDoc`. Kombinasi itu bikin admin selalu gagal menghapus komentar dengan error "Missing or insufficient permissions". Kalau situsmu sudah pernah di-setup sebelumnya, salin ulang SELURUH blok Rules di atas ke tab **Rules** di Firebase Console lalu klik **Publish** lagi — perubahan di file ini saja tidak otomatis berlaku, karena Firestore Rules disimpan di server Firebase, bukan di file statis situs.
+> ⚠️ **Penting**: Aturan `comments` di atas sudah diperbarui supaya **tamu (belum login) juga bisa berkomentar**, bukan cuma yang login Google, dan ada koleksi baru `visitLogs` untuk detail kunjungan per-jam, serta koleksi baru **`shortlinks`** untuk fitur tautan pendek (dipakai lewat halaman `s.html`, mis. `s.html?c=bab3` yang otomatis redirect ke catatan aslinya). **Aturan `comments` juga baru saja diperbaiki**: `allow update` sebelumnya `if false`, padahal tombol "Hapus komentar" di aplikasi sebenarnya melakukan `updateDoc` (soft-delete, biar bisa dipulihkan dari Trash) — bukan `deleteDoc`. Kombinasi itu bikin admin selalu gagal menghapus komentar dengan error "Missing or insufficient permissions". Kalau situsmu sudah pernah di-setup sebelumnya, salin ulang SELURUH blok Rules di atas ke tab **Rules** di Firebase Console lalu klik **Publish** lagi — perubahan di file ini saja tidak otomatis berlaku, karena Firestore Rules disimpan di server Firebase, bukan di file statis situs.
 
 3. Klik **Publish**.
 

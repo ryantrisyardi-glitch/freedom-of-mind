@@ -7,7 +7,8 @@ import {
   getAllAdmins, addAdmin, removeAdmin,
   getAllReaders, deleteReader,
   getPageViewStats, getPopularPages, getVisitLogs, getAllCityStats, getAllSourceStats,
-  getAllComments,
+  getAllComments, getAllNotes,
+  createShortLink, getAllShortLinks, deleteShortLink,
   getAllNotes, updateNote,
   backupAllData, restoreAllData,
 } from "./data.js";
@@ -22,6 +23,8 @@ let activeTab = "analytics";
 let admins = [], readers = [], pageStats = [], popularPages = [], comments = [], visitLogs = [];
 let allCityStats = {};
 let allSourceStats = {};
+let shortlinks = [], allNotesForLinks = [];
+let linkFormError = "", linkFormSuccess = null; // { code, target }
 let visitFilterDate = "", visitFilterHourFrom = 0, visitFilterHourTo = 23;
 let visitFilterWho = "all"; // "all" | "admin" | "nonadmin"
 let comparePeriod = "day"; // "hour" | "day" | "week" | "month" — untuk section Perbandingan Qty vs Qty Unik
@@ -47,9 +50,10 @@ async function loadAndRender() {
   // memakai batas tanggalnya masing-masing, jadi tidak ada yang berubah di situ.
   const results = await Promise.allSettled([
     getAllAdmins(), getAllReaders(), getPageViewStats(180), getPopularPages(10), getAllComments(), getVisitLogs(90, 5000), getAllCityStats(), getAllSourceStats(),
+    getAllShortLinks(), getAllNotes(),
   ]);
-  const keys = ["admins", "readers", "pageStats", "popularPages", "comments", "visitLogs", "allCityStats", "allSourceStats"];
-  const fallbacks = [admins, readers, pageStats, popularPages, comments, visitLogs, allCityStats, allSourceStats];
+  const keys = ["admins", "readers", "pageStats", "popularPages", "comments", "visitLogs", "allCityStats", "allSourceStats", "shortlinks", "allNotesForLinks"];
+  const fallbacks = [admins, readers, pageStats, popularPages, comments, visitLogs, allCityStats, allSourceStats, shortlinks, allNotesForLinks];
   const values = results.map(function(r, i) {
     if (r.status === "fulfilled") return r.value;
     loadErrors[keys[i]] = (r.reason && r.reason.message) || String(r.reason);
@@ -59,6 +63,8 @@ async function loadAndRender() {
   popularPages = values[3]; comments = values[4]; visitLogs = values[5];
   allCityStats = values[6] || {};
   allSourceStats = values[7] || {};
+  shortlinks = values[8] || [];
+  allNotesForLinks = values[9] || [];
   lastLoadedAt = new Date();
 
   // Kalau SEMUA query gagal (mis. belum login/rules salah total), baru
@@ -84,6 +90,7 @@ function render() {
         tabBtn("analytics", "Analitik", "") +
         tabBtn("readers",   "Pembaca",  readers.length) +
         tabBtn("admins",    "Admin",    admins.length + 1) +
+        tabBtn("links",     "Tautan Pendek", shortlinks.length) +
         tabBtn("maintenance", "Perbaikan", "") +
         '<span class="admin-tabs__spacer"></span>' +
         '<span class="admin-tabs__refreshed" id="adminRefreshedAt">' + escHtml(refreshedLabel) + '</span>' +
@@ -92,7 +99,8 @@ function render() {
       '<div id="adminTabContent">' +
         (activeTab === "analytics" ? renderAnalytics() :
          activeTab === "readers"   ? renderReaders()   :
-         activeTab === "admins"    ? renderAdmins()    : renderMaintenance()) +
+         activeTab === "admins"    ? renderAdmins()    :
+         activeTab === "links"     ? renderLinks()     : renderMaintenance()) +
       "</div>" +
     "</div>";
 
@@ -140,6 +148,21 @@ function render() {
     if (addBtn) addBtn.addEventListener("click", handleAdd);
     root.querySelectorAll("[data-remove]").forEach(function(b) {
       b.addEventListener("click", function() { handleRemove(b.dataset.remove); });
+    });
+  } else if (activeTab === "links") {
+    var createBtn = document.getElementById("createLinkBtn");
+    if (createBtn) createBtn.addEventListener("click", handleCreateShortLink);
+    root.querySelectorAll("[data-copy-link]").forEach(function(b) {
+      b.addEventListener("click", function() {
+        navigator.clipboard.writeText(b.dataset.copyLink).then(function() {
+          var orig = b.textContent;
+          b.textContent = "tersalin ✓";
+          setTimeout(function() { b.textContent = orig; }, 1600);
+        });
+      });
+    });
+    root.querySelectorAll("[data-del-link]").forEach(function(b) {
+      b.addEventListener("click", function() { handleDeleteShortLink(b.dataset.delLink); });
     });
   } else if (activeTab === "maintenance") {
     var fixBtn = document.getElementById("fixDropCapBtn");
@@ -730,6 +753,84 @@ function renderAdmins() {
 // ============================================================
 // Tab: Perbaikan (maintenance tools)
 // ============================================================
+// ============================================================
+// Tab: Tautan Pendek (shortlink custom, mis. buat share ke Instagram)
+// ============================================================
+function shortlinkBaseUrl() {
+  // Ambil folder situs (sebelum admin.html) supaya link tetap benar walau
+  // situsnya di-deploy di subfolder (mis. GitHub Pages project page).
+  return location.origin + location.pathname.replace(/admin\.html$/, "");
+}
+
+function resolveNoteTitleFromTarget(target) {
+  try {
+    var qs = new URLSearchParams((target.split("?")[1] || ""));
+    var id = qs.get("id");
+    var note = allNotesForLinks.find(function(n) { return n.id === id; });
+    return note ? note.judul : "(catatan tidak ditemukan / sudah dihapus)";
+  } catch { return ""; }
+}
+
+function renderLinks() {
+  var base = shortlinkBaseUrl();
+
+  var noteOptions = allNotesForLinks.map(function(n) {
+    return '<option value="' + escHtml(n.id) + '">' + escHtml(n.judul) + '</option>';
+  }).join("");
+
+  var formMsg = "";
+  if (linkFormError)   formMsg = '<p class="form-error">' + escHtml(linkFormError) + '</p>';
+  if (linkFormSuccess) {
+    var full = base + "s.html?c=" + encodeURIComponent(linkFormSuccess.code);
+    formMsg =
+      '<div class="link-success">' +
+        '<p>Tautan dibuat ✓</p>' +
+        '<div class="link-success__row"><code>' + escHtml(full) + '</code>' +
+          '<button class="share-btn" data-copy-link="' + escHtml(full) + '">salin</button></div>' +
+        '<div class="link-success__row"><code>' + escHtml(full + "&utm_source=instagram") + '</code>' +
+          '<button class="share-btn" data-copy-link="' + escHtml(full + "&utm_source=instagram") + '">salin (IG)</button></div>' +
+        '<div class="link-success__row"><code>' + escHtml(full + "&utm_source=whatsapp") + '</code>' +
+          '<button class="share-btn" data-copy-link="' + escHtml(full + "&utm_source=whatsapp") + '">salin (WA)</button></div>' +
+      '</div>';
+  }
+
+  var rows = shortlinks.length === 0
+    ? '<p class="empty-state">Belum ada tautan pendek dibuat.</p>'
+    : shortlinks.map(function(l) {
+        var full = base + "s.html?c=" + encodeURIComponent(l.code);
+        var noteTitle = resolveNoteTitleFromTarget(l.target || "");
+        return '<div class="link-row">' +
+          '<div class="link-row__main">' +
+            '<span class="link-row__code">/s.html?c=' + escHtml(l.code) + '</span>' +
+            '<span class="link-row__target">\u2192 ' + escHtml(l.target || "") + (noteTitle ? " (" + escHtml(noteTitle) + ")" : "") + '</span>' +
+          '</div>' +
+          '<div class="link-row__meta">' +
+            '<span>' + (l.hits || 0) + ' klik</span>' +
+            '<button class="share-btn" data-copy-link="' + escHtml(full) + '">salin</button>' +
+            '<button class="btn btn-danger" data-del-link="' + escHtml(l.code) + '">hapus</button>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+
+  return '<div class="stat-section">' +
+    '<h3 class="stat-section__title">Buat Tautan Pendek</h3>' +
+    '<p class="stat-note" style="margin:0 0 14px">' +
+      'Pendekkan link catatan yang mau dibagikan, terutama buat Instagram (Bio/Story/DM). ' +
+      'Kode boleh Anda tentukan sendiri (huruf/angka/strip, tanpa spasi). ' +
+      'Setelah dibuat, tinggal tambahkan <code>&utm_source=instagram</code> atau <code>&utm_source=whatsapp</code> di belakangnya kalau mau tracking sumbernya — atau pakai tombol "salin (IG)"/"salin (WA)" yang sudah otomatis ditag.' +
+    '</p>' +
+    '<div class="link-form">' +
+      '<select id="linkNoteSelect"><option value="">— pilih catatan —</option>' + noteOptions + '</select>' +
+      '<input type="text" id="linkCodeInput" placeholder="kode custom, mis. bab3" maxlength="40">' +
+      '<button class="btn btn-primary" id="createLinkBtn">Buat Tautan</button>' +
+    '</div>' +
+    formMsg +
+    '<h3 class="stat-section__title" style="margin-top:26px">Daftar Tautan Pendek</h3>' +
+    '<div class="link-list">' + rows + '</div>' +
+  '</div>';
+}
+
+
 function renderMaintenance() {
   return '<div class="stat-section">' +
     '<h3 class="stat-section__title">Backup &amp; Restore</h3>' +
@@ -960,6 +1061,41 @@ async function handleRemove(email) {
   if (!ok) return;
   await removeAdmin(email);
   admins = admins.filter(function(e) { return e !== email; });
+  render();
+}
+
+async function handleCreateShortLink() {
+  linkFormError = ""; linkFormSuccess = null;
+  var noteSel  = document.getElementById("linkNoteSelect");
+  var codeInp  = document.getElementById("linkCodeInput");
+  var noteId   = noteSel ? noteSel.value : "";
+  var rawCode  = codeInp ? (codeInp.value || "").trim() : "";
+
+  if (!noteId) { linkFormError = "Pilih catatan yang mau ditautkan dulu."; render(); return; }
+  var code = rawCode.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  if (!code) { linkFormError = "Kode custom wajib diisi (huruf/angka/strip saja)."; render(); return; }
+
+  var note = allNotesForLinks.find(function(n) { return n.id === noteId; });
+  var target = "note.html?id=" + noteId;
+
+  var btn = document.getElementById("createLinkBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Membuat…"; }
+  try {
+    await createShortLink(code, target, note ? note.judul : "");
+    shortlinks = await getAllShortLinks();
+    linkFormSuccess = { code: code, target: target };
+    if (codeInp) codeInp.value = "";
+  } catch (err) {
+    linkFormError = (err && err.message) || "Gagal membuat tautan.";
+  }
+  render();
+}
+
+async function handleDeleteShortLink(code) {
+  var ok = await showConfirm('Hapus tautan pendek "/s.html?c=' + code + '"? Link yang sudah dibagikan akan berhenti berfungsi.');
+  if (!ok) return;
+  await deleteShortLink(code);
+  shortlinks = shortlinks.filter(function(l) { return l.code !== code; });
   render();
 }
 

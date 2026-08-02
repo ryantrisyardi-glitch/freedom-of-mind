@@ -13,6 +13,9 @@
 //     (satu dokumen per pemuatan halaman — dipakai untuk detail per-jam di admin,
 //      terpisah dari agregat harian di koleksi pageViews)
 //   admins:   { id = email, addedBy, addedAt }
+//   shortlinks: { id = kode custom (mis. "bab3"), target ("note.html?id=xxx"),
+//                 label (judul, buat referensi admin saja), hits, createdAt }
+//     Dipakai s.html untuk redirect: /s.html?c=bab3&utm_source=instagram
 //
 // Soft delete: deletedAt == null  -> aktif (tampil normal)
 //              deletedAt = waktu  -> di Trash (masih ada, bisa di-restore)
@@ -457,6 +460,39 @@ export async function getAllSourceStats() {
     });
   });
   return sources;
+}
+
+/**
+ * Tautan pendek custom (buat dibagikan ke Instagram/dsb — biar tidak perlu
+ * kirim URL panjang). Koleksi "shortlinks", doc id = kode itu sendiri
+ * (mis. "bab3"). Redirect sebenarnya ditangani oleh s.html di sisi client.
+ */
+export async function createShortLink(code, target, label) {
+  const ref = doc(db, "shortlinks", code);
+  const existing = await getDoc(ref);
+  if (existing.exists()) throw new Error("Kode \u201c" + code + "\u201d sudah dipakai, coba kode lain.");
+  await setDoc(ref, { target, label: label || "", hits: 0, createdAt: serverTimestamp() });
+  return code;
+}
+
+export async function getAllShortLinks() {
+  const snap = await getDocs(collection(db, "shortlinks"));
+  return snap.docs
+    .map((d) => ({ code: d.id, ...d.data() }))
+    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+}
+
+export async function deleteShortLink(code) {
+  await deleteDoc(doc(db, "shortlinks", code));
+}
+
+export async function getShortLink(code) {
+  const snap = await getDoc(doc(db, "shortlinks", code));
+  return snap.exists() ? { code, ...snap.data() } : null;
+}
+
+export async function bumpShortLinkHits(code) {
+  await updateDoc(doc(db, "shortlinks", code), { hits: increment(1) }).catch(() => null);
 }
 
 export { increment };

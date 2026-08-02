@@ -14,7 +14,7 @@
 // "does not provide an export named 'backupAllData'": admin.html memuat
 // admin-page.js versi baru, tapi data.js yang dipanggilnya masih versi lama
 // dari cache (belum punya fungsi backupAllData/restoreAllData).
-const CACHE_NAME = "fom-shell-v14";
+const CACHE_NAME = "fom-shell-v15";
 
 const SHELL_FILES = [
   "./",
@@ -24,6 +24,7 @@ const SHELL_FILES = [
   "./editor.html",
   "./admin.html",
   "./trash.html",
+  "./s.html",
   "./css/style.css",
   "./js/firebase-config.js",
   "./js/firebase-core.js",
@@ -38,6 +39,7 @@ const SHELL_FILES = [
   "./js/editor-page.js",
   "./js/admin-page.js",
   "./js/trash-page.js",
+  "./js/shortlink-redirect.js",
   "./manifest.webmanifest",
   "./favicon.png",
   "./icons/icon-192.png",
