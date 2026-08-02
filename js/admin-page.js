@@ -9,7 +9,7 @@ import {
   getPageViewStats, getPopularPages, getVisitLogs, getAllCityStats, getAllSourceStats,
   getAllComments, getAllNotes,
   createShortLink, getAllShortLinks, deleteShortLink,
-  getAllNotes, updateNote,
+  updateNote,
   backupAllData, restoreAllData,
 } from "./data.js";
 import { initAnalytics } from "./analytics.js";
